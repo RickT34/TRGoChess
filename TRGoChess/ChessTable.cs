@@ -13,7 +13,7 @@ using static TRGoChess.ChessTable;
 
 namespace TRGoChess
 {
-    internal class ChessTable : IGrid
+    public class ChessTable : IGrid
     {
         public class ChessBlock : IComparable
         {
@@ -472,7 +472,7 @@ namespace TRGoChess
             return s;
         }
     }
-    internal class CAction
+    public class CAction
     {
         public readonly Point Loc;
         public readonly int from, to;
@@ -550,7 +550,7 @@ namespace TRGoChess
             return re;
         }
     }
-    internal class PMath
+    public class PMath
     {
         public static readonly Point[] towords = new Point[] { new Point(0, 1), new Point(-1, 1), new Point(-1, 0), new Point(-1, -1), new Point(1, 1), new Point(1, 0), new Point(1, -1), new Point(0, -1) };
         public static List<Point> GetStraight(Point point, Point toward, int step = 1)
@@ -608,7 +608,7 @@ namespace TRGoChess
         public static Point Add(Point a, Point b) => new Point(a.X + b.X, a.Y + b.Y);
         public static Point Mius(Point a, Point b) => new Point(a.X - b.X, a.Y - b.Y);
     }
-    internal class IconMaker
+    public class IconMaker
     {
         public Bitmap bitmap;
         public RectangleF nextDraw;
@@ -623,7 +623,7 @@ namespace TRGoChess
             if(backGround!=Color.Transparent)
                 g.FillRectangle(new SolidBrush(backGround), nextDraw);
         }
-        internal class Icon
+        public class Icon
         {
             public readonly int n;
             public readonly bool isFill;
@@ -643,11 +643,11 @@ namespace TRGoChess
                 else this.delta = delta;
             }
             public Icon(string s, Brush brush, int xiv, int yiv) :this(-1, Color.Transparent, true, 0, default,TextImage(s,brush, xiv, yiv)) { }
-            public static Image TextImage(string s, Brush brush, int xiv, int yiv)
+            public static Image TextImage(string s, Brush brush, int xiv, int yiv, float emsize=75)
             {
                 Bitmap bitmap=new Bitmap(100,100*s.Length);
                 Graphics g = Graphics.FromImage(bitmap);
-                g.DrawString(s, new Font(FontFamily.Families[2], 80), brush, xiv, yiv);
+                g.DrawString(s, new Font(FontFamily.Families[2], emsize), brush, xiv, yiv);
                 return bitmap;
             }
 
@@ -702,8 +702,9 @@ namespace TRGoChess
             }
         }
     }
-    internal class TableMaker
+    public class TableMaker
     {
+        public const int xiv = 0, yiv = 0;
         public enum BlockMark
         {
             None = 0,
@@ -761,46 +762,58 @@ namespace TRGoChess
                 g.DrawLine(blockInf.pen, rectangle.X, rectangle.Y, rectangle.X + rectangle.Width - 1, rectangle.Y + rectangle.Height - 1);
             }
         }
-        public static Image GetStandredTable(int width,int height, Size iconSize)
+        public static Image GetStandredTable(int width,int height, Size iconSize, bool Loc=true)
         {
-            Bitmap re=new Bitmap(width*iconSize.Width,height*iconSize.Height);
-            Graphics g= Graphics.FromImage(re);
+            BlockInf[,] def=new BlockInf[width,height];
             for(int x=0;x<width;x++)
                 for(int y = 0; y < height; y++)
                 {
-                    DrawBlock(g,new Rectangle(x*iconSize.Width,y*iconSize.Height,iconSize.Width,iconSize.Height),BlockInf.Defaut);
+                    def[x, y] = BlockInf.Defaut;
                 }
-            return re;
+            return GetTable(width, height,iconSize, def,Loc?ChessGame.DEFDrawIv.X:0);
         }
-        public static Image GetTable(int width, int height, Size iconSize, BlockInf[,] blockInfs)
+        public static Image GetTable(int width, int height, Size iconSize, BlockInf[,] blockInfs, int LocSize)
         {
-            Bitmap re = new Bitmap(width * iconSize.Width, height * iconSize.Height);
+            Bitmap re = new Bitmap(width * iconSize.Width + LocSize*2, height * iconSize.Height + LocSize*2);
             Graphics g = Graphics.FromImage(re);
+            if (LocSize>0)
+            {
+                for(int x = 0; x < width; x++)
+                {
+                    Image t = IconMaker.Icon.TextImage(((char)('a' + x)).ToString(), Brushes.Black, xiv, yiv, 60);
+                    Image n = IconMaker.Icon.TextImage((height - x).ToString(), Brushes.Black, xiv, yiv, 60);
+                    g.DrawImage(t, x * iconSize.Width + LocSize + (iconSize.Width - LocSize) / 2, height * iconSize.Height + LocSize, LocSize, LocSize);
+                    g.DrawImage(t, x * iconSize.Width + LocSize + (iconSize.Width - LocSize) / 2, 0, LocSize, LocSize);
+                    int h = (height - x)>9?LocSize*2:LocSize;
+                    g.DrawImage(n,0, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, LocSize, h);
+                    g.DrawImage(n, width*iconSize.Width+LocSize, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, LocSize, h);
+                }
+            }
             for (int x = 0; x < width; x++)
                 for (int y = 0; y < height; y++)
                 {
-                    DrawBlock(g, new Rectangle(x * iconSize.Width, y * iconSize.Height, iconSize.Width, iconSize.Height), blockInfs[x,y]);
+                    DrawBlock(g, new Rectangle(x * iconSize.Width + LocSize, y * iconSize.Height + LocSize, iconSize.Width, iconSize.Height), blockInfs[x,y]);
                 }
             return re;
         }
     }
-    internal interface IGrid
+    public interface IGrid
     {
         int this[int x,int y] { get;}
         int Width { get; }
         int Height { get; }
     }
-    internal class GridDrawer
+    public class GridDrawer
     {
         private readonly IGrid Grid;
-        private Image Background;
+        public Image Background;
         public readonly Size IconSize;
         public readonly Dictionary<int, Image> id2Img;
         private Graphics g;
         private Bitmap bitmap;
-        private Dictionary<Point, string> Locs;
+        public readonly Point DrawIv;
         public static Pen BGLinePen = Pens.Black;
-        public GridDrawer(IGrid grid, Image background, Size iconSize, Dictionary<int, Image> id2Img)
+        public GridDrawer(IGrid grid, Image background, Size iconSize, Dictionary<int, Image> id2Img, Point drawIv)
         {
             Grid = grid;
             Background = background;
@@ -810,52 +823,33 @@ namespace TRGoChess
             {
                 Background=TableMaker.GetStandredTable(grid.Width, grid.Height, iconSize);
             }
-            Locs = new Dictionary<Point, string>();
-            for (int x = 0; x < Grid.Width; x++)
-                for (int y = 0; y < Grid.Height; y++)
-                    Locs[new Point(x, y)] = "\n\n  " + x.ToString() + "," + y.ToString();
+            DrawIv= drawIv;
         }
-        private Rectangle GetBlockRect(int X, int Y) => new Rectangle(X * IconSize.Width, Y * IconSize.Height, IconSize.Width, IconSize.Height);
-        private Rectangle GetBlockRectSub(int X, int Y) => new Rectangle(X * IconSize.Width + 2, Y * IconSize.Height + 2, IconSize.Width - 4, IconSize.Height - 4);
-        public Image GetImage(bool Line = false, bool Smaller = true, bool Loc = true, Dictionary<Point, string> data = null)
+        private Rectangle GetBlockRect(int X, int Y) => new Rectangle(X * IconSize.Width+DrawIv.X, Y * IconSize.Height+DrawIv.Y, IconSize.Width, IconSize.Height);
+        private Rectangle GetBlockRectSub(int X, int Y) => new Rectangle(X * IconSize.Width + 2 + DrawIv.X, Y * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
+        public Image GetImage(bool Smaller = true, Dictionary<Point, string> data = null)
         {
-            bitmap = new Bitmap(IconSize.Width * Grid.Width, IconSize.Height * Grid.Height);
+            bitmap = new Bitmap(Background.Width, Background.Height);
             g = Graphics.FromImage(bitmap);
             GC.Collect();
-            g.DrawImage(Background, 0, 0, bitmap.Width, bitmap.Height);
-            if (Line) SetLine(BGLinePen, g);
+            g.DrawImage(Background,0,0);
             for (int x = 0; x < Grid.Width; x++)
                 for (int y = 0; y < Grid.Height; y++)
                     if (id2Img.ContainsKey(Grid[x, y]))
                         g.DrawImage(id2Img[Grid[x, y]], Smaller ? GetBlockRectSub(x, y) : GetBlockRect(x, y));
-            if (Loc) DrawData(Locs, Brushes.DarkGreen);
             if (data != null) DrawData(data, Brushes.Red);
             return bitmap;
         }
-        public void SetLine(Pen pen, Graphics g)
-        {
-            for (int i = 1; i < Grid.Width; i++)
-                g.DrawLine(pen, i * IconSize.Width, 0, i * IconSize.Width, IconSize.Height * Grid.Height);
-            for (int i = 1; i < Grid.Height; i++)
-                g.DrawLine(pen, 0, i * IconSize.Height, IconSize.Width * Grid.Width, i * IconSize.Height);
-        }
-        public void SetStandredBG(Color color, bool BGLine = true)
-        {
-            Background = new Bitmap(IconSize.Width * Grid.Width, IconSize.Height * Grid.Height);
-            Graphics bg = Graphics.FromImage(Background);
-            bg.Clear(color);
-            if (BGLine) SetLine(BGLinePen, bg);
-        }
-        public Point GetClick(Point point) => new Point(point.X / IconSize.Width, point.Y / IconSize.Height);
+        public Point GetClick(Point point) => new Point((point.X-DrawIv.X) / IconSize.Width, (point.Y-DrawIv.Y) / IconSize.Height);
         private void DrawData(Dictionary<Point, string> data, Brush brush)
         {
             foreach (Point p in data.Keys)
             {
-                g.DrawString(data[p], new Font(FontFamily.Families[2], 8), brush, p.X * IconSize.Width, p.Y * IconSize.Height);
+                g.DrawString(data[p], new Font(FontFamily.Families[2], 8), brush, GetBlockRect(p.X,p.Y));
             }
         }
     }
-    internal class PowerCounter
+    public class PowerCounter
     {
         public class AutoMach
         {

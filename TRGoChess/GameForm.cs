@@ -14,58 +14,127 @@ namespace TRGoChess
 {
     public partial class GameForm : Form
     {
-        internal class HumanPlayer : Player
+        public class HumanPlayer : Player
         {
             private Queue<Point> points = new Queue<Point>();
             private int maxp;
             private GameForm gameForm;
             private GUIImg gUI;
             private PictureBox pictureBox;
-            public HumanPlayer(PictureBox pictureBox, int maxp, GameForm gameForm) : base("Human")
+            private IActionInf actionInf;
+            private ContextMenuStrip menuStrip;
+            private Dictionary<string, CAction[]> cas;
+            private IEnumerable<CAction[]> caa;
+            public HumanPlayer(PictureBox pictureBox, int maxp, GameForm gameForm,IActionInf actionInf) : base("Human")
             {
                 this.pictureBox = pictureBox;
+                menuStrip= new ContextMenuStrip();
                 pictureBox.MouseClick += PictureBox_MouseClick;
+                menuStrip.ItemClicked += MenuStrip_ItemClicked;
                 this.maxp = maxp;
+                this.actionInf= actionInf;
                 this.gameForm = gameForm;
-                gUI= new GUIImg(gameForm.ChessGame.Width, gameForm.ChessGame.Height, gameForm.ChessGame.IconSize, Color.Blue);
+                gUI = new GUIImg(gameForm.ChessGame.Width, gameForm.ChessGame.Height, gameForm.ChessGame.IconSize,new Dictionary<int, Color>() { [1] = Color.Blue, [2]=Color.Orange},gameForm.ChessGame.DrawIv,gameForm.ChessGame.ImageSize);
             }
 
+            private void MenuStrip_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
+            {
+                action = cas[e.ClickedItem.Text];
+                gameForm.Nexturn();
+            }
+
+            public void EndTurn()
+            {
+                if (points.Count == 1)
+                    MarkMoves(points.Peek());
+            }
             private void PictureBox_MouseClick(object sender, MouseEventArgs e)
             {
-                if(e.Button== MouseButtons.Left)
+                if (gameForm.ChessGame.NowPlayer != this) return;
+                if (e.Button == MouseButtons.Left)
                 {
-                    if (gameForm.ChessGame.NowPlayer != this) return;
                     if (points.Count == maxp) points.Dequeue();
-                    points.Enqueue(e.Location);
-                    if (points.Count == maxp)
+                    points.Enqueue(gameForm.ChessGame.GetClick(e.Location));
+                    if (maxp == 1)
                     {
                         gameForm.Nexturn();
                     }
+                    else if (maxp == 2)
+                    {
+                        if(points.Count == 1)
+                        {
+                            MarkMoves(gameForm.ChessGame.GetClick(e.Location));
+                        }
+                        else 
+                        { 
+                            gameForm.Nexturn();
+                        }
+                    }
                 }
-                LinkedList<Point> list = new LinkedList<Point>();
-                foreach (Point p in points)
+                else if(e.Button == MouseButtons.Right)
                 {
-                    list.AddLast(gameForm.ChessGame.GetClick(p));
+                    MarkMoves(gameForm.ChessGame.GetClick(e.Location));
+                    menuStrip.Items.Clear();
+                    cas = new Dictionary<string, CAction[]>();
+                    if (caa != null)
+                    {
+                        foreach (CAction[] ca in caa)
+                        {
+                            string s = actionInf.GetActionInf(ca);
+                            menuStrip.Items.Add(s);
+                            cas[s] = ca;
+                        }
+                    }
+                    if(menuStrip.Items.Count>0)
+                        menuStrip.Show(pictureBox,e.Location);
                 }
-                pictureBox.Image = gUI.GetGUI(list);
+                
             }
 
+            private void MarkMoves(Point chessLoc)
+            {
+                if (actionInf != null)
+                {
+                    caa = actionInf.GetMoves(chessLoc, this);
+                    if (caa.Any())
+                    {
+                        Dictionary<Point, int> map = new Dictionary<Point, int>();
+                        map[chessLoc] = 1;
+                        foreach (CAction[] ca in caa)
+                        {
+                            if (ca.Length == 2)
+                                map[ca[0].Loc] = 2;
+                        }
+                        pictureBox.Image = gUI.GetGUI(map);
+                        return;
+                    }
+                }
+                pictureBox.Image = gUI.GetGUI(new Point[] { chessLoc });
+            }
+            private CAction[] action;
             public override void Go(ChessGame game, IEnumerable<CAction[]> legalActions)
             {
-                CAction[] action;
                 if (points.Count == 1 || points.Count == 2)
                 {
-                    Point[] ps = points.ToArray();
-                    action = game.GetAction(ps, this);
-                    game.ApplyAction(action);
+                    if (action == null)
+                    {
+                        Point[] ps = points.ToArray();
+                        action = game.GetAction(ps, this);
+                    }
+                    if( game.ApplyAction(action))
+                        points.Clear();
+                    else
+                    {
+                        points.Dequeue();
+                    }
+                    action= null;
                 }
-                points.Clear();
             }
         }
-        internal class GUIImg : IGrid
+        public class GUIImg : IGrid
         {
             public int[,] points;
-            public int this[int x, int y] => points[x,y];
+            public int this[int x, int y] => points[x, y];
             public int width, height;
             private GridDrawer GridDrawer;
 
@@ -73,39 +142,61 @@ namespace TRGoChess
 
             public int Height => height;
 
-            public GUIImg(int width, int height, Size iconSize, Color color)
+            public GUIImg(int width, int height, Size iconSize, Dictionary<int, Color> colors, Point DrawIv, Size backgroundSize)
             {
                 this.width = width;
                 this.height = height;
-                GridDrawer = new GridDrawer(this, new Bitmap(width * iconSize.Width, height * iconSize.Height), iconSize, new Dictionary<int, Image> { [1] = IconMaker.DEFChess(iconSize, Color.Transparent,color).bitmap });
+                Dictionary<int, Image> images = new Dictionary<int, Image>();
+                foreach(int k in colors.Keys)
+                {
+                    images[k] = IconMaker.DEFChess(iconSize, Color.Transparent, colors[k]).bitmap;
+                }
+                GridDrawer = new GridDrawer(this, new Bitmap(backgroundSize.Width, backgroundSize.Height), iconSize, images,DrawIv);
             }
-            public Image GetGUI(IEnumerable<Point> d)
+            public GUIImg(int width, int height, Size iconSize, Color color, Point DrawIv, Size backgroundSize):this(width,height, iconSize, new Dictionary<int, Color>() { [1]=color}, DrawIv, backgroundSize) { }
+            public Image GetGUI(IEnumerable<Point> d, int t=1)
             {
                 points = new int[width, height];
                 foreach (Point point in d)
-                    points[point.X, point.Y] = 1;
-                return GridDrawer.GetImage(false, false, false);
+                    points[point.X, point.Y] = t;
+                return GridDrawer.GetImage();
+            }
+            public Image GetGUI(Dictionary<Point, int> p2t)
+            {
+                points=new int[width, height];
+                foreach(Point p in p2t.Keys)
+                    points[p.X, p.Y] = p2t[p];
+                return GridDrawer.GetImage();
             }
         }
-       internal ChessGame ChessGame;
+        public readonly ChessGame ChessGame;
         private GUIImg gUIImg;
         private BackgroundWorker BackgroundWorker;
-        UniversalAI uai;
-        public GameForm()
+        private UniversalAI uai;
+        private HumanPlayer hum;
+        public GameForm(ChessGame chessGame, int ai, bool firsth)
         {
             InitializeComponent();
             BackgroundWorker = new BackgroundWorker();
             BackgroundWorker.DoWork += BackgroundWorker_DoWork;
             BackgroundWorker.RunWorkerCompleted += BackgroundWorker_RunWorkerCompleted;
-            ChessGame = new InternationalChess();
-            ChessGame.AddPlayer(new HumanPlayer(pictureBox1, 2, this));
-            //ChessGame.AddPlayer(new UniversalAI(ChessGame as IAIControl, 5));
-            uai = new UniversalAI(ChessGame as IAIControl, 4);
-            ChessGame.AddPlayer(uai);
-            //ChessGame.AddPlayer(new HumanPlayer(pictureBox1, 1, this));
-            dir = "./" + DateTime.Now.ToString("MM;dd;HH mm;ss");
-            Directory.CreateDirectory(dir);
-            gUIImg = new GUIImg(ChessGame.Width, ChessGame.Height, ChessGame.IconSize,Color.Red);
+            ChessGame = chessGame;
+            Text= chessGame.Name;
+            uai = new UniversalAI(ChessGame as IAIControl, ai);
+            hum = new HumanPlayer(pictureBox1, ChessGame is RuledChessGame ? 2 : 1, this, ChessGame as IActionInf);
+            if (firsth)
+            {
+                ChessGame.AddPlayer(hum);
+                ChessGame.AddPlayer(uai);
+            }
+            else
+            {
+                ChessGame.AddPlayer(uai);
+                ChessGame.AddPlayer(hum);
+            }
+            dir = "./" + DateTime.Now.ToString(ChessGame.Name + "_MM;dd HH;mm;ss");
+            //Directory.CreateDirectory(dir);
+            gUIImg = new GUIImg(ChessGame.Width, ChessGame.Height, ChessGame.IconSize, Color.Red, chessGame.DrawIv,chessGame.ImageSize);
             UpdateTable();
         }
 
@@ -124,7 +215,9 @@ namespace TRGoChess
             pictureBox1.Enabled = button1.Enabled;
             Update();
             if (!(ChessGame.NowPlayer is HumanPlayer))
-               NextT();
+                NextT();
+            else
+                hum.EndTurn();
         }
 
         private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
@@ -152,12 +245,12 @@ namespace TRGoChess
                 BackgroundWorker.RunWorkerAsync();
             }
         }
-        int picI = 0;
-        string dir;
+        private int picI = 0;
+        private string dir;
         private void UpdateTable()
         {
             pictureBox1.BackgroundImage = ChessGame.GetImage(uai.data);
-            pictureBox1.BackgroundImage.Save(dir + "/" + (++picI).ToString() + ".bmp");
+            //pictureBox1.BackgroundImage.Save(dir + "/" + (++picI).ToString() + ".bmp");
             button1.BackgroundImage = ChessGame.GetPlayerIcon(ChessGame.NowPlayer);
             LinkedList<Point> points = new LinkedList<Point>();
             CAction[] ca = ChessGame.LastAction();
@@ -165,7 +258,7 @@ namespace TRGoChess
             {
                 foreach (CAction c in ca)
                     points.AddLast(c.Loc);
-                
+
             }
             pictureBox1.Image = gUIImg.GetGUI(points);
             label1.Text = ChessGame.NowPlayer.Name;

@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace TRGoChess
 {
-    internal static class Program
+    public static class Program
     {
         /// <summary>
         /// 应用程序的主入口点。
@@ -16,7 +16,7 @@ namespace TRGoChess
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new GameForm());
+            Application.Run(new StartForm());
         }
     }
 }

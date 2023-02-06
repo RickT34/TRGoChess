@@ -14,11 +14,12 @@ using static TRGoChess.ChessTable;
 
 namespace TRGoChess
 {
-    internal class ChessGame
+    public class ChessGame
     {
         protected readonly ChessTable ChessTable;
         public static readonly Size DEFBlockSize = new Size(45, 45);
         public static readonly Size DEFChessSize = new Size(30, 30);
+        public static readonly Point DEFDrawIv = new Point(20, 20);
         public readonly GridDrawer GridDrawer;
         public readonly List<Player> players;
         protected readonly Dictionary<Player, Player> PlayerNext;
@@ -28,13 +29,15 @@ namespace TRGoChess
         private bool endTurn;
         public bool EndTurn { get => endTurn; }
         public Player Winner { get => winner; }
+        public Point DrawIv { get => GridDrawer.DrawIv; }
+        public Size ImageSize { get=>GridDrawer.Background.Size; }
         private Player winner;
         protected IEnumerable<CAction[]> NowLegalActions;
         public Player NextPlayer(Player player) => PlayerNext[player];
-        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, bool optifineAround = false)
+        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, Point DrawIV, bool optifineAround = false)
         {
             ChessTable = new ChessTable(width, height, initDirections, initIds, optifineAround);
-            GridDrawer = new GridDrawer(ChessTable, BackGround, IconSize, id2image);
+            GridDrawer = new GridDrawer(ChessTable, BackGround, IconSize, id2image, DrawIV);
             PlayerNext = new Dictionary<Player, Player>();
             players = new List<Player>();
             PlayerId = new Dictionary<Player, int>();
@@ -73,7 +76,7 @@ namespace TRGoChess
             }
             return false;
         }
-        public Image GetImage(Dictionary<Point, string> data = null) => GridDrawer.GetImage(false, true, true, data);
+        public Image GetImage(Dictionary<Point, string> data = null) => GridDrawer.GetImage(true, data);
         public bool ApplyAction(CAction[] action)
         {
             CAction[] i = CAction.Find(NowLegalActions, action);
@@ -107,8 +110,8 @@ namespace TRGoChess
         }
         public CAction[] GetAction(Point[] points, Player player)
         {
-            if (points.Length == 1) return CAction.Add(ChessTable[GridDrawer.GetClick(points[0])], PlayerId[player]);
-            if (points.Length == 2) return CAction.Move(ChessTable[GridDrawer.GetClick(points[0])], ChessTable[GridDrawer.GetClick(points[1])]);
+            if (points.Length == 1) return CAction.Add(ChessTable[points[0]], PlayerId[player]);
+            if (points.Length == 2) return CAction.Move(ChessTable[points[0]], ChessTable[points[1]]);
             throw new Exception("Error action!");
         }
         public Point GetClick(Point point)=>GridDrawer.GetClick(point);
@@ -126,8 +129,12 @@ namespace TRGoChess
             }
             ChessTable.Apply(re);
         }
+        public string ChessLocToStr(Point loc)
+        {
+            return ((char)(loc.X + 'a')).ToString()+(Height-loc.Y).ToString();
+        }
     }
-    internal class Player
+    public class Player
     {
         public readonly int Id;
         public static int PlayerCount = 0;
@@ -143,11 +150,11 @@ namespace TRGoChess
             game.ApplyAction(legalActions.First());
         }
     }
-    internal class UniversalAI : Player
+    public class UniversalAI : Player
     {
         private IAIControl AIControl;
         private int depth;
-        public const int ParaCore = 8;
+        public const int ParaCore = 16;
         public Dictionary<Point, string> data;
         public UniversalAI(IAIControl aIControl, int depth) : base("AI")
         {
@@ -164,16 +171,17 @@ namespace TRGoChess
             {
                 CAction[][] ac = actions.ToArray();
                 int l = Math.Min(ParaCore, ac.Length);
+                /*
                 ChessTable[] chessTables= new ChessTable[l];
                 chessTables[0] = blocks;
                 for (int k = 1; k < l; k++)
                 {
                     chessTables[k] = blocks.Clone();
-                }
+                }*/
                 Dictionary<int, CAction[]> res=new Dictionary<int, CAction[]>();
                 Parallel.For(0, l, (j) =>
                 {
-                    ChessTable blocks2 = chessTables[j];
+                    ChessTable blocks2 = blocks.Clone();
                     int t = 0;
                     CAction[] ree = re;
                     int r = int.MinValue;
@@ -262,13 +270,13 @@ namespace TRGoChess
                 act = legalActions.First();
             else
             {
-                act = GetBestMove(this, AIControl.GetChessTable(), out int rate, depth, int.MaxValue, true,true);
+                act = GetBestMove(this, AIControl.GetChessTable(), out int rate, depth, int.MaxValue, true);
                 Console.WriteLine(rate.ToString());
             }
             game.ApplyAction(act);
         }
     }
-    internal interface IAIControl
+    public interface IAIControl
     {
         ChessTable GetChessTable();
         int Envaluate(ChessTable chessTable, Player player);
@@ -276,7 +284,12 @@ namespace TRGoChess
         Player NextPlayer(Player player);
         CAction[] BeforeApply(ChessTable chessTable, CAction[] action);
     }
-    internal class WZChess : ChessGame, IAIControl
+    public interface IActionInf
+    {
+        string GetActionInf(CAction[] cActions);
+        IEnumerable<CAction[]> GetMoves(Point chessPoint, Player player);
+    }
+    public class WZChess : ChessGame, IAIControl
     {
         private Dictionary<int, int[]> winPattern;
         private Dictionary<ChessBlock, CAction[][]> addAction;
@@ -285,7 +298,7 @@ namespace TRGoChess
         {
             [1] = IconMaker.DEFChess(DEFChessSize, Color.White).bitmap,
             [2] = IconMaker.DEFChess(DEFChessSize, Color.Black).bitmap
-        }, new int[] { 1, 2 }, true)
+        }, new int[] { 1, 2 },DEFDrawIv, true)
         {
             winPattern = new Dictionary<int, int[]>
             {
@@ -375,14 +388,14 @@ namespace TRGoChess
             return re;
         }
     }
-    internal class BWChess : ChessGame, IAIControl
+    public class BWChess : ChessGame, IAIControl
     {
         public BWChess() : base("BWChess", 8, 8, PMath.towords, null, DEFBlockSize,
             new Dictionary<int, Image>
             {
                 [2] = IconMaker.DEFChess(DEFChessSize, Color.White).bitmap,
                 [1] = IconMaker.DEFChess(DEFChessSize, Color.Black).bitmap
-            }, new int[] { 1, 2 }, true)
+            }, new int[] { 1, 2 }, DEFDrawIv,true)
         {
             CAction[] initAction = new CAction[]
             {
@@ -489,11 +502,12 @@ namespace TRGoChess
         }
 
     }
-    internal class RuledChessGame : ChessGame, IAIControl
+    public class RuledChessGame : ChessGame, IAIControl, IActionInf
     {
         public delegate IEnumerable<CAction[]> MoveRuleGetHandler(ChessBlock chessBlock, int pid, int t, RuledChessGame game);
         public delegate int ChessPowerBonus(ChessBlock chess, int pid, int t);
         public const int PlayerIdIv = 27;
+        public readonly Dictionary<int, string> IdStr;
         protected Dictionary<Player, int[]> PlayersChessId;
         public readonly MoveRuleGetHandler GetMove;
         public readonly ChessPowerBonus GetPowerBonus;
@@ -503,8 +517,9 @@ namespace TRGoChess
         public static readonly Size DEFBlockSizeR = new Size(80, 80);
         public static readonly Size DEFChessSizeR = new Size(70, 70);
         public readonly int[] GeneralT;
-        public RuledChessGame(string name, int width, int height, Point[] initDirections, MoveRuleGetHandler moveRule, Image table, Dictionary<int, Image>[] type2Image, int[] types, int playerCount, int[] typesPower, ChessPowerBonus powerBonus, int generalT = 0)
-            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount))
+        public RuledChessGame(string name, int width, int height, Point[] initDirections, MoveRuleGetHandler moveRule, Image table, Dictionary<int, Image>[] type2Image, int[] types, int playerCount, Dictionary<int, string>[] typesStr,
+            int[] typesPower, ChessPowerBonus powerBonus, int generalT = 0)
+            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount),DEFDrawIv)
         {
             Types = types;
             GetMove = moveRule;
@@ -513,6 +528,14 @@ namespace TRGoChess
             typwer = typesPower;
             IdsDEFPower = new Dictionary<int, int>();
             if (generalT != 0) GeneralT = new int[] { GetChessId(1, generalT), GetChessId(2, generalT) };
+            IdStr= new Dictionary<int, string>();
+            for(int p=0;p<2;p++)
+            {
+                foreach(int t in typesStr[p].Keys)
+                {
+                    IdStr[GetChessId(p + 1, t)] = typesStr[p][t];
+                }
+            }
         }
         public override IEnumerable<CAction[]> GetLegalActions(Player player)
         {
@@ -587,14 +610,43 @@ namespace TRGoChess
         {
             return GridDrawer.id2Img[GetChessId(PlayerId[player], Types[0])];
         }
+
+        public virtual string GetActionInf(CAction[] cActions)
+        {
+            if (cActions.Length == 1)
+                if(cActions[0].from==ChessBlock.DEFID)
+                    return "在 " + ChessLocToStr(cActions[0].Loc) + " 下 " + IdStr[cActions[0].to];
+                else
+                    return "将 " + ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from] + " 换为 " + IdStr[cActions[0].to];
+            if(cActions.Length == 2)
+            {
+                if (cActions[0].from == ChessBlock.DEFID && cActions[1].to == ChessBlock.DEFID)
+                    return "将 " + ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 移动到 " + ChessLocToStr(cActions[0].Loc);
+                if (cActions[0].to == cActions[1].from && cActions[1].to == ChessBlock.DEFID)
+                    return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 吃 " + ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from];
+            }
+            throw new Exception("No Inf!");
+
+        }
+
+        public IEnumerable<CAction[]> GetMoves(Point chessPoint, Player player)
+        {
+            ChessBlock chessBlock = ChessTable[chessPoint];
+            int p = GetPlayerId(chessBlock.Id);
+            if (p == PlayerId[player])
+            {
+                return GetMove(chessBlock, p, GetType(chessBlock.Id), this);
+            }
+            return new CAction[0][];
+        }
     }
 
-    internal class InternationalChess : RuledChessGame
+    public class InternationalChess : RuledChessGame
     {
         public static readonly Point[] chessStep = new Point[] { new Point(0, 1), new Point(-1, 0), new Point(1, 0), new Point(0, -1),
              new Point(-1, -1), new Point(1, -1), new Point(-1, 1), new Point(1, 1),
-             new Point(-2, -1), new Point(-2, -1), new Point(-2, 1), new Point(2, -1), new Point(-1, -2), new Point(1, 2), new Point(1, -2), new Point(-1, 2)};
-        public const int xiv = -25, yiv = -10;
+             new Point(-2, -1), new Point(2, 1), new Point(-2, 1), new Point(2, -1), new Point(-1, -2), new Point(1, 2), new Point(1, -2), new Point(-1, 2)};
+        public const int xiv = -20, yiv = -5;
         public static readonly Color w = Color.White, b = Color.FromArgb(32, 32, 32);
         public static readonly Dictionary<int, Image>[] type2img = new Dictionary<int, Image>[]
         {
@@ -665,6 +717,27 @@ namespace TRGoChess
             [4] = new int[] { 0, 1, 2, 3 },
             [5] = new int[] { 0, 1, 2, 3, 4, 5, 6, 7 },
             [6] = new int[] { 0, 1, 2, 3, 4, 5, 6, 7 },
+        };
+        public static readonly Dictionary<int, string>[] typestr = new Dictionary<int, string>[]
+        {
+            new Dictionary<int, string>
+            {
+                [1]="兵",
+                [2]="马",
+                [3]="象",
+                [4]="车",
+                [5]="后",
+                [6]="王"
+            },
+            new Dictionary<int, string>
+            {
+                [1]="兵",
+                [2]="马",
+                [3]="象",
+                [4]="车",
+                [5]="后",
+                [6]="王"
+            }
         };
         //                                               P, N, B, R, Q, K
         public static readonly int[] types = new int[] { 1, 2, 3, 4, 5, 6 };
@@ -806,12 +879,12 @@ namespace TRGoChess
                         if (((chessBlock.Loc.Y == 6 && pid == 1) || (chessBlock.Loc.Y == 1 && pid == 2)) && c2.Surround[d].Id == ChessBlock.DEFID)
                         {
                             re.AddLast(CAction.Move(chessBlock, c2.Surround[d]));
-                            d = MoveDirIs[t][1];
+                            int d2 = MoveDirIs[t][1];
                             if (GetPlayerId(c2.Surround[d].Id) == 3 - pid)
-                                re.AddLast(new CAction[] { new CAction(c2.Surround[d], chessBlock.Id), new CAction(chessBlock, ChessBlock.DEFID), new CAction(c2.Surround[d],ChessBlock.DEFID) });
-                            d = MoveDirIs[t][2];
+                                re.AddLast(new CAction[] { new CAction(c2.Surround[d], chessBlock.Id), new CAction(chessBlock, ChessBlock.DEFID), new CAction(c2.Surround[d2],ChessBlock.DEFID) });
+                            d2 = MoveDirIs[t][2];
                             if (GetPlayerId(c2.Surround[d].Id) == 3 - pid)
-                                re.AddLast(new CAction[] { new CAction(c2.Surround[d], chessBlock.Id), new CAction(chessBlock, ChessBlock.DEFID), new CAction(c2.Surround[d], ChessBlock.DEFID) });
+                                re.AddLast(new CAction[] { new CAction(c2.Surround[d], chessBlock.Id), new CAction(chessBlock, ChessBlock.DEFID), new CAction(c2.Surround[d2], ChessBlock.DEFID) });
                         }
                         if ((chessBlock.Loc.Y == 1 && pid == 1) || (chessBlock.Loc.Y == 6 && pid == 2))
                         {
@@ -973,12 +1046,22 @@ namespace TRGoChess
                 {
                     r[x, y] = ((x + y) % 2 == 0) ? w : b;
                 }
-            return TableMaker.GetTable(8, 8, new Size(45, 45), r);
+            return TableMaker.GetTable(8, 8, DEFBlockSizeR, r,DEFDrawIv.X);
         }
-        public InternationalChess() : base("ITNChess", 8, 8, chessStep, Getmove, GetTable(), type2img, types, 2, tyPr, chessPowerBonus)
+        public InternationalChess() : base("ITNChess", 8, 8, chessStep, Getmove, GetTable(), type2img, types, 2, typestr, tyPr, chessPowerBonus)
         {
             InitTable(InitT);
             CanSwap = new int[] { 3, 3 };
+        }
+        public override string GetActionInf(CAction[] cActions)
+        {
+            if (cActions.Length == 3)
+                return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 吃过路兵 " + ChessLocToStr(cActions[2].Loc) + IdStr[cActions[2].from];
+            if(cActions.Length == 4)
+                return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 异位 " + ChessLocToStr(cActions[3].Loc) + IdStr[cActions[3].from];
+            if (cActions.Length == 2 && cActions[0].to != cActions[1].from)
+                return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + "升变 " + IdStr[cActions[0].to];
+            return base.GetActionInf(cActions);
         }
     }
 }
