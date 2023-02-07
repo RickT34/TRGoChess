@@ -133,8 +133,10 @@ namespace TRGoChess
         public ChessTable(int width, int height, Point[] initDirections, int[] initIds, bool optifinedAround = false)
         {
             ChessT = new ChessBlock[width, height];
-            id2chess = new Dictionary<int, ChessBlocksLink>();
-            id2chess[ChessBlock.DEFID] = new ChessBlocksLink();
+            id2chess = new Dictionary<int, ChessBlocksLink>
+            {
+                [ChessBlock.DEFID] = new ChessBlocksLink()
+            };
             NoneBlock = new ChessBlock(new Point(-1, -1), ChessBlock.NONEID);
             foreach (int i in initIds)
                 id2chess[i] = new ChessBlocksLink();
@@ -160,19 +162,19 @@ namespace TRGoChess
         }
         public ChessTable Clone()
         {
-            ChessTable re=new ChessTable(Width, Height,directions, id2chess.Keys.ToArray(),OptifinedAround);
-            foreach(int i in id2chess.Keys)
+            ChessTable re = new ChessTable(Width, Height, directions, id2chess.Keys.ToArray(), OptifinedAround);
+            foreach (int i in id2chess.Keys)
             {
                 if (i == ChessBlock.DEFID) continue;
-                foreach(ChessBlock c in id2chess[i])
+                foreach (ChessBlock c in id2chess[i])
                 {
                     ChessBlock c2 = re[c.Loc];
                     re.id2chess[c2.Id].Remove(c2);
                     re.id2chess[i].AddLast(c2);
-                    c2.Id= i;
+                    c2.Id = i;
                 }
             }
-            if(actionLast!= null)
+            if (actionLast != null)
                 re.actionLast = actionLast;
             return re;
         }
@@ -184,7 +186,7 @@ namespace TRGoChess
                 return ChessT[point.X, point.Y];
             }
         }
-        public int this[int x,int y] { get => ChessT[x,y].Id; }
+        public int this[int x, int y] { get => ChessT[x, y].Id; }
         private void Apply(CAction c)
         {
             ChessBlock chess = ChessT[c.Loc.X, c.Loc.Y];
@@ -323,7 +325,7 @@ namespace TRGoChess
                 re.AddLast(chess);
                 chess = chess.Surround[direIndex];
             }
-            if(chess.Id==includeEndId)re.AddLast(chess);
+            if (chess.Id == includeEndId) re.AddLast(chess);
             return re;
         }
         public static IEnumerable<ChessBlock> GetLineSame(ChessBlock chess, IEnumerable<int> direIndex, int id, int includeEndId)
@@ -492,6 +494,10 @@ namespace TRGoChess
 
         public static bool operator ==(CAction a, CAction b) => a.Loc == b.Loc && a.to == b.to;
         public static bool operator !=(CAction a, CAction b) => !(a == b);
+        public override bool Equals(object obj)
+        {
+            return base.Equals(obj);
+        }
         public override int GetHashCode()
         {
             return Loc.X + Loc.Y << 4 + to << 12 + from << 8;
@@ -539,13 +545,13 @@ namespace TRGoChess
                 hash ^= cAction.GetHashCode();
             return hash;
         }
-        public CAction Reverse() => new CAction(Loc,to, from);
-        public static CAction[] Clone(CAction[] c, ChessTable to)
+        public CAction Reverse() => new CAction(Loc, to, from);
+        public static CAction[] Clone(CAction[] c)
         {
-            CAction[] re= new CAction[c.Length];
-            for(int i = 0; i < c.Length; i++)
+            CAction[] re = new CAction[c.Length];
+            for (int i = 0; i < c.Length; i++)
             {
-                re[i]=c[i];
+                re[i] = c[i];
             }
             return re;
         }
@@ -613,14 +619,14 @@ namespace TRGoChess
         public Bitmap bitmap;
         public RectangleF nextDraw;
         public readonly Graphics g;
-        public static IconMaker DEFChess(Size size, Color chessColor, Color aroundColor) => new IconMaker(size, Color.Transparent) * new Icon(0, chessColor, chessColor!=Color.Transparent) + new Icon(0, aroundColor, false);
-        public static IconMaker DEFChess(Size size, Color chessColor)=>DEFChess(size, chessColor, Color.Black);
+        public static IconMaker DEFChess(Size size, Color chessColor, Color aroundColor) => new IconMaker(size, Color.Transparent) * new Icon(0, chessColor, chessColor != Color.Transparent) + new Icon(0, aroundColor, false);
+        public static IconMaker DEFChess(Size size, Color chessColor) => DEFChess(size, chessColor, Color.Black);
         public IconMaker(Size size, Color backGround, bool nextdraw = true)
         {
             bitmap = new Bitmap(size.Width, size.Height);
             nextDraw = nextdraw ? new RectangleF(size.Width / 10, size.Height / 10, size.Width * 4 / 5, size.Height * 4 / 5) : new RectangleF(0, 0, size.Width, size.Height);
             g = Graphics.FromImage(bitmap);
-            if(backGround!=Color.Transparent)
+            if (backGround != Color.Transparent)
                 g.FillRectangle(new SolidBrush(backGround), nextDraw);
         }
         public class Icon
@@ -642,15 +648,19 @@ namespace TRGoChess
                 if (delta == default) this.delta = new RectangleF(0, 0, 1, 1);
                 else this.delta = delta;
             }
-            public Icon(string s, Brush brush, int xiv, int yiv) :this(-1, Color.Transparent, true, 0, default,TextImage(s,brush, xiv, yiv)) { }
-            public static Image TextImage(string s, Brush brush, int xiv, int yiv, float emsize=75)
+            public Icon(string s, Brush brush, int xiv, int yiv) : this(-1, Color.Transparent, true, 0, default, TextImage(s, brush, xiv, yiv)) { }
+            public Icon(string s, Brush brush, int xiv, int yiv, Font font) : this(-1, Color.Transparent, true, 0, default, TextImage(s, brush, xiv, yiv,font)) { }
+            public static Image TextImage(string s, Brush brush, int xiv, int yiv, float emsize = 110)
             {
-                Bitmap bitmap=new Bitmap(100,100*s.Length);
+                return TextImage(s,brush, xiv, yiv, new Font(FontFamily.Families[2], emsize));
+            }
+            public static Image TextImage(string s, Brush brush, int xiv, int yiv, Font font)
+            {
+                Bitmap bitmap = new Bitmap(150 * s.Length, 150);
                 Graphics g = Graphics.FromImage(bitmap);
-                g.DrawString(s, new Font(FontFamily.Families[2], emsize), brush, xiv, yiv);
+                g.DrawString(s, font, brush, xiv, yiv);
                 return bitmap;
             }
-
             public static IconMaker operator +(IconMaker a, Icon b)
             {
                 a *= b;
@@ -708,14 +718,27 @@ namespace TRGoChess
         public enum BlockMark
         {
             None = 0,
+
             Up = 1,
-            Down = 1<<1,
-            Left = 1<<2,
-            Right = 1<<3,
-            Cross = 1<<4,
-            MinusCross = 1<<5,
-            Box = 1 + (1 << 1) + (1 << 2) + (1 << 3),
-            Full = 1 + (1 << 1) + (1 << 2) + (1 << 3) + (1 << 4) + (1 << 5),
+            Down = 1 << 1,
+            Left = 1 << 2,
+            Right = 1 << 3,
+            
+            North = 1 << 4,
+            South = 1 << 5,
+            East = 1 << 6,
+            West = 1 << 7,
+
+            NE = 1 << 8,
+            NW = 1 << 9,
+            SE = 1 << 10,
+            SW = 1 << 11,
+            Cross = NE|SW,
+            MinusCross = NW|SE,
+            Box = Up | Down | Left | Right,
+            Full = Box | Cross | MinusCross,
+            Crossing = North | South | East | West,
+
         }
         public class BlockInf
         {
@@ -723,7 +746,7 @@ namespace TRGoChess
             public readonly BlockMark mark;
             public readonly Pen pen;
 
-            public BlockInf(BlockMark mark, Brush brush,  Pen pen)
+            public BlockInf(BlockMark mark, Brush brush, Pen pen)
             {
                 this.brush = brush;
                 this.mark = mark;
@@ -731,12 +754,14 @@ namespace TRGoChess
             }
             public BlockInf(BlockMark mark, Brush brush) : this(mark, brush, Pens.Black) { }
             public BlockInf(BlockMark mark) : this(mark, Brushes.BurlyWood, Pens.Black) { }
-            public static readonly BlockInf Defaut=new BlockInf(BlockMark.Box);
+            public static readonly BlockInf Defaut = new BlockInf(BlockMark.Box);
         }
+        public static Font LocFont = new Font("Times New Roman",90,FontStyle.Bold);
         public static void DrawBlock(Graphics g, Rectangle rectangle, BlockInf blockInf)
         {
             g.FillRectangle(blockInf.brush, rectangle);
             if (blockInf.mark == BlockMark.None) return;
+
             if ((blockInf.mark & BlockMark.Up) != 0)
             {
                 g.DrawLine(blockInf.pen, rectangle.X, rectangle.Y, rectangle.X + rectangle.Width - 1, rectangle.Y);
@@ -753,53 +778,88 @@ namespace TRGoChess
             {
                 g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width - 1, rectangle.Y, rectangle.X + rectangle.Width - 1, rectangle.Y + rectangle.Height - 1);
             }
-            if ((blockInf.mark & BlockMark.Cross) != 0)
+
+            if ((blockInf.mark & BlockMark.North) != 0)
             {
-                g.DrawLine(blockInf.pen, rectangle.X, rectangle.Y + rectangle.Height - 1, rectangle.X + rectangle.Width - 1, rectangle.Y);
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width/2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y);
             }
-            if ((blockInf.mark & BlockMark.MinusCross) != 0)
+            if ((blockInf.mark & BlockMark.South) != 0)
             {
-                g.DrawLine(blockInf.pen, rectangle.X, rectangle.Y, rectangle.X + rectangle.Width - 1, rectangle.Y + rectangle.Height - 1);
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height - 1);
+            }
+            if ((blockInf.mark & BlockMark.East) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X + rectangle.Width - 1, rectangle.Y + rectangle.Height / 2 - 1);
+            }
+            if ((blockInf.mark & BlockMark.West) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X, rectangle.Y + rectangle.Height / 2 - 1);
+            }
+
+            if ((blockInf.mark & BlockMark.NE) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X + rectangle.Width-1, rectangle.Y);
+            }
+            if ((blockInf.mark & BlockMark.NW) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X, rectangle.Y);
+            }
+            if ((blockInf.mark & BlockMark.SE) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X + rectangle.Width - 1, rectangle.Y + rectangle.Height - 1);
+            }
+            if ((blockInf.mark & BlockMark.SW) != 0)
+            {
+                g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X , rectangle.Y + rectangle.Height - 1);
             }
         }
-        public static Image GetStandredTable(int width,int height, Size iconSize, bool Loc=true)
+        public static Image GetStandredTable(int width, int height, Size iconSize, bool Loc = true)
         {
-            BlockInf[,] def=new BlockInf[width,height];
-            for(int x=0;x<width;x++)
-                for(int y = 0; y < height; y++)
+            BlockInf[,] def = new BlockInf[width, height];
+            for (int x = 0; x < width; x++)
+                for (int y = 0; y < height; y++)
                 {
                     def[x, y] = BlockInf.Defaut;
                 }
-            return GetTable(width, height,iconSize, def,Loc?ChessGame.DEFDrawIv.X:0);
+            return GetTable( iconSize, def, Loc ? ChessGame.DEFDrawIv.X : 0);
         }
-        public static Image GetTable(int width, int height, Size iconSize, BlockInf[,] blockInfs, int LocSize)
+        public static Image GetTable(Size iconSize, BlockInf[,] blockInfs, int LocSize)
         {
-            Bitmap re = new Bitmap(width * iconSize.Width + LocSize*2, height * iconSize.Height + LocSize*2);
+            int width = blockInfs.GetLength(0), height = blockInfs.GetLength(1);
+            Bitmap re = new Bitmap(width * iconSize.Width + LocSize * 2, height * iconSize.Height + LocSize * 2);
             Graphics g = Graphics.FromImage(re);
-            if (LocSize>0)
+            if (LocSize > 0)
             {
-                for(int x = 0; x < width; x++)
+                for (int x = 0; x < width; x++)
                 {
-                    Image t = IconMaker.Icon.TextImage(((char)('a' + x)).ToString(), Brushes.Black, xiv, yiv, 60);
-                    Image n = IconMaker.Icon.TextImage((height - x).ToString(), Brushes.Black, xiv, yiv, 60);
+                    Image t = IconMaker.Icon.TextImage(((char)('a' + x)).ToString(), Brushes.Black, xiv, yiv,LocFont);
                     g.DrawImage(t, x * iconSize.Width + LocSize + (iconSize.Width - LocSize) / 2, height * iconSize.Height + LocSize, LocSize, LocSize);
                     g.DrawImage(t, x * iconSize.Width + LocSize + (iconSize.Width - LocSize) / 2, 0, LocSize, LocSize);
-                    int h = (height - x)>9?LocSize*2:LocSize;
-                    g.DrawImage(n,0, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, LocSize, h);
-                    g.DrawImage(n, width*iconSize.Width+LocSize, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, LocSize, h);
+                }
+                for(int x = 0; x < height; x++)
+                {
+                    Image n = IconMaker.Icon.TextImage((height - x).ToString(), Brushes.Black, xiv, yiv, LocFont);
+                    int h = (height - x) > 9 ? LocSize * 2 : LocSize;
+                    int x1 = (height - x) > 9 ? 0 : (LocSize / 2 - 2);
+                    g.DrawImage(n, x1 - 2, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, h, LocSize);
+                    g.DrawImage(n, width * iconSize.Width + LocSize-1, x * iconSize.Height + (iconSize.Height - LocSize) / 2 + LocSize, h, LocSize);
                 }
             }
             for (int x = 0; x < width; x++)
                 for (int y = 0; y < height; y++)
                 {
-                    DrawBlock(g, new Rectangle(x * iconSize.Width + LocSize, y * iconSize.Height + LocSize, iconSize.Width, iconSize.Height), blockInfs[x,y]);
+                    DrawBlock(g, new Rectangle(x * iconSize.Width + LocSize, y * iconSize.Height + LocSize, iconSize.Width, iconSize.Height), blockInfs[x, y]);
                 }
+            g.DrawLine(Pens.Black, LocSize, LocSize, LocSize, re.Height- LocSize);
+            g.DrawLine(Pens.Black, LocSize, LocSize, re.Width- LocSize, LocSize);
+            g.DrawLine(Pens.Black, LocSize, re.Height - LocSize, re.Width- LocSize, re.Height- LocSize);
+            g.DrawLine(Pens.Black, re.Width - LocSize, LocSize, re.Width- LocSize, re.Height- LocSize);
             return re;
         }
     }
     public interface IGrid
     {
-        int this[int x,int y] { get;}
+        int this[int x, int y] { get; }
         int Width { get; }
         int Height { get; }
     }
@@ -821,18 +881,18 @@ namespace TRGoChess
             this.id2Img = id2Img;
             if (Background == null)
             {
-                Background=TableMaker.GetStandredTable(grid.Width, grid.Height, iconSize);
+                Background = TableMaker.GetStandredTable(grid.Width, grid.Height, iconSize);
             }
-            DrawIv= drawIv;
+            DrawIv = drawIv;
         }
-        private Rectangle GetBlockRect(int X, int Y) => new Rectangle(X * IconSize.Width+DrawIv.X, Y * IconSize.Height+DrawIv.Y, IconSize.Width, IconSize.Height);
+        private Rectangle GetBlockRect(int X, int Y) => new Rectangle(X * IconSize.Width + DrawIv.X, Y * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
         private Rectangle GetBlockRectSub(int X, int Y) => new Rectangle(X * IconSize.Width + 2 + DrawIv.X, Y * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
         public Image GetImage(bool Smaller = true, Dictionary<Point, string> data = null)
         {
-            bitmap = new Bitmap(Background.Width, Background.Height);
+            bitmap = new Bitmap(Background);
             g = Graphics.FromImage(bitmap);
             GC.Collect();
-            g.DrawImage(Background,0,0);
+            g.DrawImage(Background, 0, 0);
             for (int x = 0; x < Grid.Width; x++)
                 for (int y = 0; y < Grid.Height; y++)
                     if (id2Img.ContainsKey(Grid[x, y]))
@@ -840,12 +900,12 @@ namespace TRGoChess
             if (data != null) DrawData(data, Brushes.Red);
             return bitmap;
         }
-        public Point GetClick(Point point) => new Point((point.X-DrawIv.X) / IconSize.Width, (point.Y-DrawIv.Y) / IconSize.Height);
+        public Point GetClick(Point point) => new Point((point.X - DrawIv.X) / IconSize.Width, (point.Y - DrawIv.Y) / IconSize.Height);
         private void DrawData(Dictionary<Point, string> data, Brush brush)
         {
             foreach (Point p in data.Keys)
             {
-                g.DrawString(data[p], new Font(FontFamily.Families[2], 8), brush, GetBlockRect(p.X,p.Y));
+                g.DrawString(data[p], new Font(FontFamily.Families[2], 8), brush, GetBlockRect(p.X, p.Y));
             }
         }
     }

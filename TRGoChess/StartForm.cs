@@ -29,7 +29,10 @@ namespace TRGoChess
                     chessGame=new BWChess();
                     break;
                 case 2:
-                    chessGame=new InternationalChess();
+                    chessGame=new InternationalChess(radioButton2.Checked);
+                    break;
+                case 3:
+                    chessGame = new ChineseChess(radioButton2.Checked);
                     break;
                 default:
                     return;

@@ -9,6 +9,7 @@ using System.Net.Configuration;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static TRGoChess.ChessTable;
 
 namespace TRGoChess
 {
@@ -20,11 +21,11 @@ namespace TRGoChess
             private int maxp;
             private GameForm gameForm;
             private GUIImg gUI;
-            private PictureBox pictureBox;
             private IActionInf actionInf;
             private ContextMenuStrip menuStrip;
             private Dictionary<string, CAction[]> cas;
             private IEnumerable<CAction[]> caa;
+            private Control pictureBox;
             public HumanPlayer(PictureBox pictureBox, int maxp, GameForm gameForm,IActionInf actionInf) : base("Human")
             {
                 this.pictureBox = pictureBox;
@@ -34,30 +35,40 @@ namespace TRGoChess
                 this.maxp = maxp;
                 this.actionInf= actionInf;
                 this.gameForm = gameForm;
-                gUI = new GUIImg(gameForm.ChessGame.Width, gameForm.ChessGame.Height, gameForm.ChessGame.IconSize,new Dictionary<int, Color>() { [1] = Color.Blue, [2]=Color.Orange},gameForm.ChessGame.DrawIv,gameForm.ChessGame.ImageSize);
+                gUI = new GUIImg(gameForm.ChessGame.Width, gameForm.ChessGame.Height, gameForm.ChessGame.IconSize,new Dictionary<int, Color>() {
+                    [1] = Color.Blue,
+                    [2] = Color.Green,
+                    [3] = Color.GreenYellow
+                },gameForm.ChessGame.DrawIv,gameForm.ChessGame.ImageSize);
             }
 
             private void MenuStrip_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
             {
                 action = cas[e.ClickedItem.Text];
-                gameForm.Nexturn();
+                Nxt();
             }
-
             public void EndTurn()
             {
                 if (points.Count == 1)
                     MarkMoves(points.Peek());
             }
+            public override void PrePare(ChessGame game, IEnumerable<CAction[]> legalActions)
+            {
+                if (points.Count == 1)
+                    MarkMoves(points.Peek());
+                MarkMoves(legalActions);
+                base.PrePare(game, legalActions);
+            }
             private void PictureBox_MouseClick(object sender, MouseEventArgs e)
             {
                 if (gameForm.ChessGame.NowPlayer != this) return;
+                if (points.Count == maxp) points.Dequeue();
+                points.Enqueue(gameForm.ChessGame.GetClick(e.Location));
                 if (e.Button == MouseButtons.Left)
                 {
-                    if (points.Count == maxp) points.Dequeue();
-                    points.Enqueue(gameForm.ChessGame.GetClick(e.Location));
                     if (maxp == 1)
                     {
-                        gameForm.Nexturn();
+                        Nxt();
                     }
                     else if (maxp == 2)
                     {
@@ -66,8 +77,8 @@ namespace TRGoChess
                             MarkMoves(gameForm.ChessGame.GetClick(e.Location));
                         }
                         else 
-                        { 
-                            gameForm.Nexturn();
+                        {
+                            Nxt();
                         }
                     }
                 }
@@ -91,6 +102,13 @@ namespace TRGoChess
                 
             }
 
+            private void Nxt()
+            {
+                gameForm.ClearImage(Name + " moves");
+                gameForm.ClearImage(Name + " canMoves");
+                gameForm.Nexturn();
+            }
+
             private void MarkMoves(Point chessLoc)
             {
                 if (actionInf != null)
@@ -105,16 +123,29 @@ namespace TRGoChess
                             if (ca.Length == 2)
                                 map[ca[0].Loc] = 2;
                         }
-                        pictureBox.Image = gUI.GetGUI(map);
+                        gameForm.SetImage(gUI.GetGUI(map), Name + " moves");
                         return;
                     }
                 }
-                pictureBox.Image = gUI.GetGUI(new Point[] { chessLoc });
+                gameForm.SetImage(gUI.GetGUI(new Point[] { chessLoc }), Name + " moves");
+            }
+            private void MarkMoves(IEnumerable<CAction[]> legalActions)
+            {
+                Dictionary<Point, int> map = new Dictionary<Point, int>();
+                foreach (CAction[] ca in legalActions)
+                {
+                    if (ca.Length > 1)
+                        map[ca[1].Loc] = 3;
+                    else map[ca[0].Loc] = 3;
+                }
+                if(map.Count<30)
+                    gameForm.SetImage(gUI.GetGUI(map), Name + " canMoves");
+                return;
             }
             private CAction[] action;
             public override void Go(ChessGame game, IEnumerable<CAction[]> legalActions)
             {
-                if (points.Count == 1 || points.Count == 2)
+                if (points.Count == 1 || points.Count == 2||action!=null)
                 {
                     if (action == null)
                     {
@@ -174,6 +205,7 @@ namespace TRGoChess
         private BackgroundWorker BackgroundWorker;
         private UniversalAI uai;
         private HumanPlayer hum;
+        public bool saveImg = false;
         public GameForm(ChessGame chessGame, int ai, bool firsth)
         {
             InitializeComponent();
@@ -194,9 +226,16 @@ namespace TRGoChess
                 ChessGame.AddPlayer(uai);
                 ChessGame.AddPlayer(hum);
             }
-            dir = "./" + DateTime.Now.ToString(ChessGame.Name + "_MM;dd HH;mm;ss");
-            //Directory.CreateDirectory(dir);
-            gUIImg = new GUIImg(ChessGame.Width, ChessGame.Height, ChessGame.IconSize, Color.Red, chessGame.DrawIv,chessGame.ImageSize);
+            gUIImg = new GUIImg(ChessGame.Width, ChessGame.Height, ChessGame.IconSize, Color.Red, chessGame.DrawIv, chessGame.ImageSize);
+            UpdateTable();
+            Size = new Size( pictureBox1.Width+pictureBox1.Location.X*2,Size.Height+10);
+            chessGame.StartGame();
+            if (saveImg)
+            {
+                dir = "./" + ChessGame.Name + DateTime.Now.ToString( "_MM;dd HH;mm;ss");
+                Directory.CreateDirectory(dir);
+            }
+            
             UpdateTable();
         }
 
@@ -211,13 +250,16 @@ namespace TRGoChess
                 button1.Enabled = false;
                 MessageBox.Show(ChessGame.Winner.Name + " win!");
             }
-            else button1.Enabled = true;
-            pictureBox1.Enabled = button1.Enabled;
-            Update();
-            if (!(ChessGame.NowPlayer is HumanPlayer))
-                NextT();
             else
-                hum.EndTurn();
+            {
+                button1.Enabled = true;
+                ChessGame.PlayerPrepare();
+            }
+            pictureBox1.Enabled = button1.Enabled;
+            button2.Enabled=button1.Enabled;
+            Update();
+            if (!(ChessGame.NowPlayer is HumanPlayer)&& ChessGame.Winner == null)
+                NextT();
         }
 
         private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
@@ -234,6 +276,7 @@ namespace TRGoChess
         {
             button1.Enabled = false;
             pictureBox1.Enabled = false;
+            button2.Enabled= false;
             Update();
             Nexturn();
         }
@@ -250,7 +293,8 @@ namespace TRGoChess
         private void UpdateTable()
         {
             pictureBox1.BackgroundImage = ChessGame.GetImage(uai.data);
-            //pictureBox1.BackgroundImage.Save(dir + "/" + (++picI).ToString() + ".bmp");
+            if(saveImg)
+                pictureBox1.BackgroundImage.Save(dir + "/" + (++picI).ToString() + ".bmp");
             button1.BackgroundImage = ChessGame.GetPlayerIcon(ChessGame.NowPlayer);
             LinkedList<Point> points = new LinkedList<Point>();
             CAction[] ca = ChessGame.LastAction();
@@ -260,10 +304,33 @@ namespace TRGoChess
                     points.AddLast(c.Loc);
 
             }
-            pictureBox1.Image = gUIImg.GetGUI(points);
-            label1.Text = ChessGame.NowPlayer.Name;
+            SetImage(gUIImg.GetGUI(points), "GameForm lastAction");
+            Text = ChessGame.Name +":  " + ChessGame.NowPlayer.Name + "  ⌛";
         }
-
+        private Dictionary<string, Image> o2images=new Dictionary<string, Image>();
+        public void SetImage(Image image, string c)
+        {
+            o2images[c]=image;
+            ApplyImage(o2images.Values, pictureBox1.BackgroundImage.Size);
+        }
+        public void ClearImage()
+        {
+            o2images.Clear();
+            ApplyImage(o2images.Values, pictureBox1.BackgroundImage.Size);
+        }
+        public void ClearImage(string name)
+        {
+            o2images.Remove(name);
+            ApplyImage(o2images.Values, pictureBox1.BackgroundImage.Size);
+        }
+        private void ApplyImage(IEnumerable<Image> images, Size size)
+        {
+            Image image= new Bitmap(size.Width, size.Height);
+            Graphics g=Graphics.FromImage(image);
+            foreach(Image image1 in images)
+                g.DrawImage(image1, 0,0);
+            pictureBox1.Image= image;
+        }
         private void button2_Click(object sender, EventArgs e)
         {
             WZChess wZChess = ChessGame as WZChess;
@@ -285,6 +352,12 @@ namespace TRGoChess
         {
             if (button1.Enabled == false) { button1.Text = "⌛"; }
             else button1.Text = "";
+        }
+
+        private void button2_Click_1(object sender, EventArgs e)
+        {
+            ChessGame.WithDraw();
+            UpdateTable();
         }
     }
 }
