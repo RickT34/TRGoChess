@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
 using System.Drawing;
@@ -28,6 +29,7 @@ namespace TRGoChess
         protected readonly Dictionary<Player, int> PlayerId;
         protected LinkedList<CAction[]> History;
         public Player NowPlayer;
+        public Player LastPlayer;
         public readonly string Name;
         private bool endTurn;
         public bool EndTurn { get => endTurn; }
@@ -35,10 +37,9 @@ namespace TRGoChess
         public Point DrawIv { get => GridDrawer.DrawIv; }
         public Size ImageSize { get => GridDrawer.Background.Size; }
         private Player winner;
-        private readonly int Reverse;
         protected IEnumerable<CAction[]> NowLegalActions;
         public Player NextPlayer(Player player) => PlayerNext[player];
-        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, Point DrawIV, bool optifineAround = false, int reVersePlayerCount = 0)
+        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, Point DrawIV, bool optifineAround = false)
         {
             ChessTable = new ChessTable(width, height, initDirections, initIds, optifineAround);
             GridDrawer = new GridDrawer(ChessTable, BackGround, IconSize, id2image, DrawIV);
@@ -48,15 +49,13 @@ namespace TRGoChess
             Name = name;
             endTurn = false;
             winner = null;
-            Reverse = reVersePlayerCount;
             History = new LinkedList<CAction[]>();
         }
         public void AddPlayer(Player player)
         {
             if (NowPlayer == null) NowPlayer = player;
             players.Add(player);
-            if (Reverse != 0) PlayerId[player] = Reverse - players.Count + 1;
-            else PlayerId[player] = players.Count;
+            PlayerId[player] = players.Count;
             if (players.Count > 1)
                 PlayerNext[players[players.Count - 2]] = player;
             PlayerNext[player] = players[0];
@@ -78,6 +77,7 @@ namespace TRGoChess
             NowPlayer.Go(this, NowLegalActions);
             if (endTurn)
             {
+                LastPlayer = NowPlayer;
                 NowPlayer = PlayerNext[NowPlayer];
                 NowLegalActions = GetLegalActions(NowPlayer);
                 endTurn = false;
@@ -89,7 +89,7 @@ namespace TRGoChess
         {
             NowPlayer.PrePare(this, NowLegalActions);
         }
-        public Image GetImage(Dictionary<Point, string> data = null) => GridDrawer.GetImage(true, data);
+        public Image GetImage(bool reVerse = false, Dictionary<Point, string> data = null) => GridDrawer.GetImage(true, reVerse, data);
         public bool ApplyAction(CAction[] action)
         {
             CAction[] i = CAction.Find(NowLegalActions, action);
@@ -177,17 +177,22 @@ namespace TRGoChess
             game.ApplyAction(legalActions.First());
         }
         public virtual void PrePare(ChessGame game, IEnumerable<CAction[]> legalActions) { }
+        public virtual void TurnEnded(int ticks)//100ms
+        {
+
+        }
     }
     public class UniversalAI : Player
     {
         private IAIControl AIControl;
         private int depth;
-        public const int ParaCore = 16;
+        public const int ParaCore = 8;
         public Dictionary<Point, string> data;
-        public UniversalAI(IAIControl aIControl, int depth) : base("AI")
+        private int lastTicks = -1;
+        public UniversalAI(IAIControl aIControl, int deptht) : base("AI")
         {
             AIControl = aIControl;
-            this.depth = depth;
+            depth = deptht;
         }
         private CAction[] GetBestMove(Player player, ChessTable blocks, out int rate, int dep, int maxn, bool para = false, bool drawData = false)
         {
@@ -279,12 +284,14 @@ namespace TRGoChess
                     if (drawData)
                         data[cc[0].Loc] = t.ToString();
                 }
+                
                 return re;
             }
 
         }
         public override void Go(ChessGame game, IEnumerable<CAction[]> legalActions)
         {
+            RuledChessGame.EnvCount= 0;
             data = new Dictionary<Point, string>();
             CAction[] act;
             if (legalActions.Count() == 1)
@@ -292,9 +299,23 @@ namespace TRGoChess
             else
             {
                 act = GetBestMove(this, AIControl.GetChessTable(), out int rate, depth, int.MaxValue, true);
-                Console.WriteLine(rate.ToString());
+                Console.WriteLine(Name + " rate=" + rate.ToString());
+                Console.WriteLine(Name + " EnvCount=" + RuledChessGame.EnvCount.ToString());
             }
             game.ApplyAction(act);
+        }
+        public override void TurnEnded(int ticks)
+        {
+            if (lastTicks == -1) lastTicks = ticks;
+            else
+            {
+                float r = (lastTicks + ticks) / 2f;
+                if (r > 40) depth--;
+                else if (r < 5) depth++;
+                lastTicks = ticks;
+                Console.WriteLine(Name + " depth=" + depth.ToString());
+            }
+            base.TurnEnded(ticks);
         }
     }
     public interface IAIControl
@@ -352,7 +373,7 @@ namespace TRGoChess
         }
         protected override void AfterApplied(CAction[] action)
         {
-            if (ChessTable.FindPatten(winPattern[PlayerId[NowPlayer]], out int f) != null) FinishGame(NowPlayer);
+            if (ChessTable.FindPatten(winPattern[PlayerId[NowPlayer]], out _) != null) FinishGame(NowPlayer);
             base.AfterApplied(action);
         }
         private int[] Powers;
@@ -401,7 +422,7 @@ namespace TRGoChess
             else
             {
                 CAction last = chessTable.actionLast[0];
-                if (last.to == ChessBlock.DEFID || chessTable.FindPatten(winPattern[last.to], out int f) == null)
+                if (last.to == ChessBlock.DEFID || chessTable.FindPatten(winPattern[last.to], out _) == null)
                 {
                     HashSet<ChessBlock> cs = chessTable.GetAroundNearFreeStep();
                     foreach (ChessBlock c in cs)
@@ -549,8 +570,8 @@ namespace TRGoChess
         public readonly int[] GeneralT;
         public RuledChessGame(string name, int width, int height, Point[] initDirections, MoveRuleGetHandler moveRule, Image table,
             Dictionary<int, Image>[] type2Image, int[] types, int playerCount, Dictionary<int, string>[] typesStr,
-            int[] typesPower, ChessPowerBonus powerBonus, bool reVerse, int generalT = 0)
-            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount), DEFDrawIv, false, reVerse ? playerCount : 0)
+            int[] typesPower, ChessPowerBonus powerBonus, int generalT = 0)
+            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount), DEFDrawIv, false)
         {
             Types = types;
             GetMove = moveRule;
@@ -608,8 +629,10 @@ namespace TRGoChess
             }
             return re;
         }
+        public static int EnvCount = 0;
         public int Envaluate(ChessTable chessTable, Player player)
         {
+            EnvCount++;
             int re = 0, pid = PlayerId[player];
             foreach (int i in chessTable.id2chess.Keys)
             {
@@ -997,7 +1020,7 @@ namespace TRGoChess
                             if ((cg.CanSwap[pid - 1] & 1) > 0)
                             {
                                 LinkedList<ChessBlock> cl = GetLine(chessBlock, pid, 2);
-                                if (cl.Count == 3)
+                                if (cl.Count == 3 && GetType(cl.Last.Value.Id) == 4)
                                 {
                                     if (IsVolnerable(cl.First.Value, 3 - pid) == null && IsVolnerable(cl.First.Next.Value, 3 - pid) == null)
                                         re.AddLast(new CAction[] {new CAction(cl.First.Next.Value,GetChessId(pid,t)), new CAction(chessBlock, ChessBlock.DEFID),
@@ -1007,7 +1030,7 @@ namespace TRGoChess
                             if ((cg.CanSwap[pid - 1] & 2) > 0)
                             {
                                 LinkedList<ChessBlock> cl = GetLine(chessBlock, pid, 1);
-                                if (cl.Count == 4)
+                                if (cl.Count == 4 && GetType(cl.Last.Value.Id) == 4)
                                 {
                                     if (IsVolnerable(cl.First.Value, 3 - pid) == null && IsVolnerable(cl.First.Next.Value, 3 - pid) == null && IsVolnerable(cl.First.Next.Next.Value, 3 - pid) == null)
                                         re.AddLast(new CAction[] {new CAction(cl.First.Next.Value,GetChessId(pid,t)), new CAction(chessBlock, ChessBlock.DEFID),
@@ -1101,13 +1124,13 @@ namespace TRGoChess
                 }
             return TableMaker.GetTable(DEFBlockSizeR, r, DEFDrawIv.X);
         }
-        public InternationalChess(bool reverse) : base("ITNChess", 8, 8, chessStep, Getmove, GetTable(), type2img, types, 2, typestr, tyPr, chessPowerBonus, reverse, 6)
+        public InternationalChess() : base("ITNChess", 8, 8, chessStep, Getmove, GetTable(), type2img, types, 2, typestr, tyPr, chessPowerBonus, 6)
         {
             CanSwap = new int[] { 3, 3 };
         }
         public override void StartGame()
         {
-            InitTable(InitT);
+            InitTable(InitTT);
             base.StartGame();
         }
         public override string GetActionInf(CAction[] cActions)
@@ -1232,7 +1255,90 @@ namespace TRGoChess
             [new Point(6, 6)] = GetChessId(1, 1),
             [new Point(8, 6)] = GetChessId(1, 1),
         };
-        public ChineseChess(bool reVerse) : base("CHSChess", 9, 10, chessStep, Getmove, MkTable(), chessImg, types, 2, typesS, typesP, GtPowerBonus, reVerse, 7)
+        public static readonly Dictionary<int, int[,]> PosBnous = new Dictionary<int, int[,]>
+        {
+            [7] = new int[,]{{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, -9, -9, -9, 0, 0, 0},
+{0, 0, 0, -8, -8, -8, 0, 0, 0},
+{0, 0, 0, 1, 5, 1, 0, 0, 0}},
+            [5] = new int[,]{{6, 8, 7, 13, 14, 13, 7, 8, 6},
+{6, 12, 9, 16, 33, 16, 9, 12, 6},
+{6, 8, 7, 14, 16, 14, 7, 8, 6},
+{6, 13, 13, 16, 16, 16, 13, 13, 6},
+{8, 11, 11, 14, 15, 14, 11, 11, 8},
+{8, 12, 12, 14, 15, 14, 12, 12, 8},
+{4, 9, 4, 12, 14, 12, 4, 9, 4},
+{-2, 8, 4, 12, 12, 12, 4, 8, -2},
+{5, 8, 6, 12, 0, 12, 6, 8, 5},
+{-6, 6, 4, 12, 0, 12, 4, 6, -6}},
+            [2] = new int[,]{{2, 2, 2, 8, 2, 8, 2, 2, 2},
+{2, 8, 15, 9, 6, 9, 15, 8, 2},
+{4, 10, 11, 15, 11, 15, 11, 10, 4},
+{5, 20, 12, 19, 12, 19, 12, 20, 5},
+{2, 12, 11, 15, 16, 15, 11, 12, 2},
+{2, 10, 13, 14, 15, 14, 13, 10, 2},
+{4, 6, 10, 7, 10, 7, 10, 6, 4},
+{5, 4, 6, 7, 4, 7, 6, 4, 5},
+{-3, 2, 4, 5, -10, 5, 4, 2, -3},
+{0, -3, 2, 0, 2, 0, 2, -3, 0}},
+            [4] = new int[,]{{4, 4, 0, -5, -6, -5, 0, 4, 4},
+{2, 2, 0, -4, -7, -4, 0, 2, 2},
+{1, 1, 0, -5, -4, -5, 0, 1, 1},
+{0, 3, 3, 2, 4, 2, 3, 3, 0},
+{0, 0, 0, 0, 4, 0, 0, 0, 0},
+{-1, 0, 3, 0, 4, 0, 3, 0, -1},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{1, 0, 4, 3, 5, 3, 4, 0, 1},
+{0, 1, 2, 2, 2, 2, 2, 1, 0},
+{0, 0, 1, 3, 3, 3, 1, 0, 0}},
+            [3] = new int[,]{{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{-2, 0, 0, 0, 3, 0, 0, 0, -2},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0}},
+            [6] = new int[,]{{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 3, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0}},
+            [1] = new int[,]{{0, 0, 0, 2, 4, 2, 0, 0, 0},
+{20, 30, 50, 65, 70, 65, 50, 30, 20},
+{20, 30, 45, 55, 55, 55, 45, 30, 20},
+{20, 27, 30, 40, 42, 40, 30, 27, 20},
+{10, 18, 22, 35, 40, 35, 22, 18, 10},
+{3, 0, 4, 0, 7, 0, 4, 0, 3},
+{-2, 0, -2, 0, 6, 0, -2, 0, -2},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0},
+{0, 0, 0, 0, 0, 0, 0, 0, 0}}
+        };
+        public static readonly Dictionary<int, int> MovBnous = new Dictionary<int, int>
+        {
+            [1] = 15,
+            [2] = 12,
+            [3] = 1,
+            [4] = 6,
+            [5] = 6,
+            [6] = 1,
+            [7] = 1
+        };
+        public ChineseChess() : base("CHSChess", 9, 10, chessStep, Getmove, MkTable(), chessImg, types, 2, typesS, typesP, GtPowerBonus, 7)
         {
 
         }
@@ -1459,23 +1565,9 @@ namespace TRGoChess
 
         public static int GtPowerBonus(ChessBlock chess, int pid, int t)
         {
-            int re = Countmove(chess, pid, t) * 5;
-            if (t == 1)
-            {
-                if (pid == 1 && chess.Loc.Y < 3)
-                {
-                    re += chess.Loc.Y * 10;
-                }
-                if (pid == 2 && chess.Loc.Y > 6)
-                {
-                    re += (9 - chess.Loc.Y) * 10;
-                }
-                if (chess.Loc.X == 3 || chess.Loc.X == 5)
-                    re += 10;
-                else if (chess.Loc.X == 4)
-                    re += 20;
-            }
-            return re;
+            int re = Countmove(chess, pid, t) * MovBnous[t];
+            if(pid==1)return re + PosBnous[t][chess.Loc.Y, chess.Loc.X];
+            else return re + PosBnous[t][9 - chess.Loc.Y, chess.Loc.X];
         }
         protected override void AfterApplied(CAction[] action)
         {

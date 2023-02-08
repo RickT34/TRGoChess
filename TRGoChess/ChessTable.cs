@@ -867,12 +867,13 @@ namespace TRGoChess
     {
         private readonly IGrid Grid;
         public Image Background;
+        private Image BackgroundRev;
         public readonly Size IconSize;
         public readonly Dictionary<int, Image> id2Img;
         private Graphics g;
         private Bitmap bitmap;
+        private bool reVersed;
         public readonly Point DrawIv;
-        public static Pen BGLinePen = Pens.Black;
         public GridDrawer(IGrid grid, Image background, Size iconSize, Dictionary<int, Image> id2Img, Point drawIv)
         {
             Grid = grid;
@@ -883,16 +884,27 @@ namespace TRGoChess
             {
                 Background = TableMaker.GetStandredTable(grid.Width, grid.Height, iconSize);
             }
+            BackgroundRev = (Image)Background.Clone();
+            BackgroundRev.RotateFlip(RotateFlipType.RotateNoneFlipY);
             DrawIv = drawIv;
         }
-        private Rectangle GetBlockRect(int X, int Y) => new Rectangle(X * IconSize.Width + DrawIv.X, Y * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
-        private Rectangle GetBlockRectSub(int X, int Y) => new Rectangle(X * IconSize.Width + 2 + DrawIv.X, Y * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
-        public Image GetImage(bool Smaller = true, Dictionary<Point, string> data = null)
+        private Rectangle GetBlockRect(int X, int Y)
         {
-            bitmap = new Bitmap(Background);
+            if(reVersed) return new Rectangle(X * IconSize.Width + DrawIv.X, (Grid.Height - Y - 1) * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
+            return new Rectangle(X * IconSize.Width + DrawIv.X, Y * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
+        }
+        private Rectangle GetBlockRectSub(int X, int Y)
+        {
+            if (reVersed) return new Rectangle(X * IconSize.Width + 2 + DrawIv.X, (Grid.Height-Y-1) * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
+            return new Rectangle(X * IconSize.Width + 2 + DrawIv.X, Y * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
+        }
+        public Image GetImage(bool Smaller = true,bool reVerse=false, Dictionary<Point, string> data = null)
+        {
+            reVersed = reVerse;
+            if(reVersed) bitmap = new Bitmap(BackgroundRev);
+            else bitmap = new Bitmap(Background);
             g = Graphics.FromImage(bitmap);
             GC.Collect();
-            g.DrawImage(Background, 0, 0);
             for (int x = 0; x < Grid.Width; x++)
                 for (int y = 0; y < Grid.Height; y++)
                     if (id2Img.ContainsKey(Grid[x, y]))
@@ -900,7 +912,11 @@ namespace TRGoChess
             if (data != null) DrawData(data, Brushes.Red);
             return bitmap;
         }
-        public Point GetClick(Point point) => new Point((point.X - DrawIv.X) / IconSize.Width, (point.Y - DrawIv.Y) / IconSize.Height);
+        public Point GetClick(Point point)
+        {
+            if(reVersed) return new Point((point.X - DrawIv.X) / IconSize.Width,Grid.Height - (point.Y - DrawIv.Y) / IconSize.Height - 1);
+            return new Point((point.X - DrawIv.X) / IconSize.Width, (point.Y - DrawIv.Y) / IconSize.Height);
+        }
         private void DrawData(Dictionary<Point, string> data, Brush brush)
         {
             foreach (Point p in data.Keys)

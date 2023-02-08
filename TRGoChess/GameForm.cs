@@ -203,10 +203,8 @@ namespace TRGoChess
         public readonly ChessGame ChessGame;
         private GUIImg gUIImg;
         private BackgroundWorker BackgroundWorker;
-        private UniversalAI uai;
-        private HumanPlayer hum;
-        public bool saveImg = false;
-        public GameForm(ChessGame chessGame, int ai, bool firsth)
+        public bool saveImg = false, autoNxt=false;
+        public GameForm(ChessGame chessGame, int[] ai)
         {
             InitializeComponent();
             BackgroundWorker = new BackgroundWorker();
@@ -214,17 +212,13 @@ namespace TRGoChess
             BackgroundWorker.RunWorkerCompleted += BackgroundWorker_RunWorkerCompleted;
             ChessGame = chessGame;
             Text= chessGame.Name;
-            uai = new UniversalAI(ChessGame as IAIControl, ai);
-            hum = new HumanPlayer(pictureBox1, ChessGame is RuledChessGame ? 2 : 1, this, ChessGame as IActionInf);
-            if (firsth)
+            foreach(int i in ai)
             {
-                ChessGame.AddPlayer(hum);
-                ChessGame.AddPlayer(uai);
-            }
-            else
-            {
-                ChessGame.AddPlayer(uai);
-                ChessGame.AddPlayer(hum);
+                if (i == -1) {
+                    ChessGame.AddPlayer(new HumanPlayer(pictureBox1, ChessGame is RuledChessGame ? 2 : 1, this, ChessGame as IActionInf));
+                    autoNxt = true;
+                } 
+                else ChessGame.AddPlayer(new UniversalAI(ChessGame as IAIControl, i));
             }
             gUIImg = new GUIImg(ChessGame.Width, ChessGame.Height, ChessGame.IconSize, Color.Red, chessGame.DrawIv, chessGame.ImageSize);
             UpdateTable();
@@ -235,14 +229,17 @@ namespace TRGoChess
                 dir = "./" + ChessGame.Name + DateTime.Now.ToString( "_MM;dd HH;mm;ss");
                 Directory.CreateDirectory(dir);
             }
-            
             UpdateTable();
+            if (!(ChessGame.NowPlayer is HumanPlayer) && ChessGame.Winner == null && autoNxt)
+                NextT();
         }
 
         private void BackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
+            timer1.Stop();
             if ((bool)e.Result)
             {
+                ChessGame.LastPlayer?.TurnEnded(ticks);
                 UpdateTable();
             }
             if (ChessGame.Winner != null)
@@ -258,7 +255,8 @@ namespace TRGoChess
             pictureBox1.Enabled = button1.Enabled;
             button2.Enabled=button1.Enabled;
             Update();
-            if (!(ChessGame.NowPlayer is HumanPlayer)&& ChessGame.Winner == null)
+            ticks = 0;
+            if (!(ChessGame.NowPlayer is HumanPlayer)&& ChessGame.Winner == null&&autoNxt)
                 NextT();
         }
 
@@ -285,14 +283,22 @@ namespace TRGoChess
         {
             if (!BackgroundWorker.IsBusy)
             {
+                timer1.Start();
+
                 BackgroundWorker.RunWorkerAsync();
             }
         }
         private int picI = 0;
         private string dir;
+        public bool Reversed=false;
         private void UpdateTable()
         {
-            pictureBox1.BackgroundImage = ChessGame.GetImage(uai.data);
+            if (ChessGame.NowPlayer is HumanPlayer)
+            {
+                bool rev = ChessGame.players[ChessGame.players.Count - 1] == ChessGame.NowPlayer;
+                Reversed = rev;
+            }
+            pictureBox1.BackgroundImage = ChessGame.GetImage(Reversed);
             if(saveImg)
                 pictureBox1.BackgroundImage.Save(dir + "/" + (++picI).ToString() + ".bmp");
             button1.BackgroundImage = ChessGame.GetPlayerIcon(ChessGame.NowPlayer);
@@ -330,6 +336,7 @@ namespace TRGoChess
             foreach(Image image1 in images)
                 g.DrawImage(image1, 0,0);
             pictureBox1.Image= image;
+            if (Reversed) pictureBox1.Image.RotateFlip(RotateFlipType.RotateNoneFlipY);
         }
         private void button2_Click(object sender, EventArgs e)
         {
@@ -342,16 +349,14 @@ namespace TRGoChess
             }
             MessageBox.Show(re);
         }
-
+        private int ticks = 0;
         private void timer1_Tick(object sender, EventArgs e)
         {
-            UpdateTable();
+            ticks++;
         }
 
         private void button1_EnabledChanged(object sender, EventArgs e)
         {
-            if (button1.Enabled == false) { button1.Text = "⌛"; }
-            else button1.Text = "";
         }
 
         private void button2_Click_1(object sender, EventArgs e)

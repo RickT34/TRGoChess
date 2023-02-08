@@ -29,18 +29,26 @@ namespace TRGoChess
                     chessGame=new BWChess();
                     break;
                 case 2:
-                    chessGame=new InternationalChess(radioButton2.Checked);
+                    chessGame=new InternationalChess();
                     break;
                 case 3:
-                    chessGame = new ChineseChess(radioButton2.Checked);
+                    chessGame = new ChineseChess();
                     break;
                 default:
                     return;
             }
-            GameForm gameForm = new GameForm(chessGame, (int)numericUpDown1.Value, radioButton1.Checked);
+            GameForm gameForm = new GameForm(chessGame,new int[] { radioButton2.Checked?4:-1, radioButton3.Checked ? 4: -1 } );
             Hide();
             gameForm.ShowDialog();
             Show();
+        }
+
+        private void radioButton2_CheckedChanged(object sender, EventArgs e)
+        {
+        }
+
+        private void radioButton3_CheckedChanged(object sender, EventArgs e)
+        {
         }
     }
 }
