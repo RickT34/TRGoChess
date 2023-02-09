@@ -17,7 +17,7 @@ using static TRGoChess.ChessTable;
 
 namespace TRGoChess
 {
-    public class ChessGame
+    public class ChessGame:IActionInf
     {
         protected readonly ChessTable ChessTable;
         public static readonly Size DEFBlockSize = new Size(45, 45);
@@ -28,6 +28,8 @@ namespace TRGoChess
         protected readonly Dictionary<Player, Player> PlayerNext;
         protected readonly Dictionary<Player, int> PlayerId;
         protected LinkedList<CAction[]> History;
+        public int HistoryCount { get=>History.Count;}
+        public readonly Dictionary<int, string> IdStr;
         public Player NowPlayer;
         public Player LastPlayer;
         public readonly string Name;
@@ -39,7 +41,7 @@ namespace TRGoChess
         private Player winner;
         protected IEnumerable<CAction[]> NowLegalActions;
         public Player NextPlayer(Player player) => PlayerNext[player];
-        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, Point DrawIV, bool optifineAround = false)
+        public ChessGame(string name, int width, int height, Point[] initDirections, Image BackGround, Size IconSize, Dictionary<int, Image> id2image, int[] initIds, Point DrawIV, Dictionary<int, string> idStr, bool optifineAround = false)
         {
             ChessTable = new ChessTable(width, height, initDirections, initIds, optifineAround);
             GridDrawer = new GridDrawer(ChessTable, BackGround, IconSize, id2image, DrawIV);
@@ -50,6 +52,7 @@ namespace TRGoChess
             endTurn = false;
             winner = null;
             History = new LinkedList<CAction[]>();
+            IdStr = idStr;
         }
         public void AddPlayer(Player player)
         {
@@ -142,6 +145,7 @@ namespace TRGoChess
                 re[i++] = new CAction(ChessTable[p], p2i[p]);
             }
             ChessTable.Apply(re);
+            ChessTable.actionLast = null;
         }
         public string ChessLocToStr(Point loc)
         {
@@ -159,6 +163,29 @@ namespace TRGoChess
                 NowLegalActions = GetLegalActions(NowPlayer);
                 PlayerPrepare();
             }
+        }
+
+        public virtual string GetActionInf(CAction[] cActions)
+        {
+            if (cActions.Length == 1)
+                if (cActions[0].from == ChessBlock.DEFID)
+                    return ChessLocToStr(cActions[0].Loc) + " 下 " + IdStr[cActions[0].to];
+                else
+                    return ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from] + " 换为 " + IdStr[cActions[0].to];
+            if (cActions.Length == 2)
+            {
+                if (cActions[0].from == ChessBlock.DEFID && cActions[1].to == ChessBlock.DEFID)
+                    return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 移动到 " + ChessLocToStr(cActions[0].Loc);
+                if (cActions[0].to == cActions[1].from && cActions[1].to == ChessBlock.DEFID)
+                    return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 吃 " + ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from];
+            }
+            throw new Exception("No Inf!");
+
+        }
+
+        public virtual IEnumerable<CAction[]> GetMoves(Point chessPoint, Player player)
+        {
+            return new CAction[][] { CAction.Add(ChessTable[chessPoint], PlayerId[player]) };
         }
     }
     public class Player
@@ -188,7 +215,7 @@ namespace TRGoChess
         private int depth;
         public const int ParaCore = 8;
         public Dictionary<Point, string> data;
-        private int lastTicks = -1;
+        private int lastTicks = 10;
         public UniversalAI(IAIControl aIControl, int deptht) : base("AI")
         {
             AIControl = aIControl;
@@ -291,7 +318,6 @@ namespace TRGoChess
         }
         public override void Go(ChessGame game, IEnumerable<CAction[]> legalActions)
         {
-            RuledChessGame.EnvCount= 0;
             data = new Dictionary<Point, string>();
             CAction[] act;
             if (legalActions.Count() == 1)
@@ -300,21 +326,16 @@ namespace TRGoChess
             {
                 act = GetBestMove(this, AIControl.GetChessTable(), out int rate, depth, int.MaxValue, true);
                 Console.WriteLine(Name + " rate=" + rate.ToString());
-                Console.WriteLine(Name + " EnvCount=" + RuledChessGame.EnvCount.ToString());
             }
             game.ApplyAction(act);
         }
         public override void TurnEnded(int ticks)
         {
-            if (lastTicks == -1) lastTicks = ticks;
-            else
-            {
-                float r = (lastTicks + ticks) / 2f;
-                if (r > 40) depth--;
-                else if (r < 5) depth++;
-                lastTicks = ticks;
-                Console.WriteLine(Name + " depth=" + depth.ToString());
-            }
+            int r = (lastTicks + ticks * 2) / 3;
+            if (r > 40) depth--;
+            else if (r < 5) depth++;
+            lastTicks = ticks;
+            Console.WriteLine(Name + " depth=" + depth.ToString());
             base.TurnEnded(ticks);
         }
     }
@@ -333,14 +354,17 @@ namespace TRGoChess
     }
     public class WZChess : ChessGame, IAIControl
     {
+        public static readonly Size DEFBlockSizeW = new Size(35, 35);
+        public static readonly Size DEFChessSizeW = new Size(30, 30);
+        public static readonly Point DEFDrawIvW = new Point(20, 20);
         private Dictionary<int, int[]> winPattern;
         private Dictionary<ChessBlock, CAction[][]> addAction;
         public PowerCounter powerCounter;
-        public WZChess() : base("WZChess", 19, 19, PMath.towords, null, DEFBlockSize, new Dictionary<int, Image>
+        public WZChess() : base("WZChess", 19, 19, PMath.towords, null, DEFBlockSizeW, new Dictionary<int, Image>
         {
-            [1] = IconMaker.DEFChess(DEFChessSize, Color.White).bitmap,
-            [2] = IconMaker.DEFChess(DEFChessSize, Color.Black).bitmap
-        }, new int[] { 1, 2 }, DEFDrawIv, true)
+            [1] = IconMaker.DEFChess(DEFChessSizeW, Color.White).bitmap,
+            [2] = IconMaker.DEFChess(DEFChessSizeW, Color.Black).bitmap
+        }, new int[] { 1, 2 }, DEFDrawIvW,new Dictionary<int, string> { [1] = "白子", [2]="黑子"} ,true)
         {
             winPattern = new Dictionary<int, int[]>
             {
@@ -441,20 +465,21 @@ namespace TRGoChess
             {
                 [2] = IconMaker.DEFChess(DEFChessSize, Color.White).bitmap,
                 [1] = IconMaker.DEFChess(DEFChessSize, Color.Black).bitmap
-            }, new int[] { 1, 2 }, DEFDrawIv, true)
+            }, new int[] { 1, 2 }, DEFDrawIv,new Dictionary<int, string> { [1] = "黑子", [2]="白子"}, true)
         {
 
         }
+        public static readonly Dictionary<Point, int> p2i = new Dictionary<Point, int>()
+        {
+            [new Point(3, 3)] = 1,
+            [new Point(4, 4)] = 1,
+            [new Point(3, 4)] = 2,
+            [new Point(4, 3)] = 2,
+        };
+
         public override void StartGame()
         {
-            CAction[] initAction = new CAction[]
-            {
-                new CAction(ChessTable.ChessT[3,3],1),
-                new CAction(ChessTable.ChessT[3,4],2),
-                new CAction(ChessTable.ChessT[4,3],2),
-                new CAction(ChessTable.ChessT[4,4],1)
-            };
-            ChessTable.Apply(initAction);
+            InitTable(p2i);
             base.StartGame();
         }
         public int Envaluate(ChessTable chessTable, Player player)
@@ -551,14 +576,16 @@ namespace TRGoChess
             if (!NowLegalActions.Any() || v == 100 || v == -100) FinishGame(v > 0 ? NowPlayer : PlayerNext[NowPlayer]);
             base.AfterApplied(action);
         }
-
+        public override string GetActionInf(CAction[] cActions)
+        {
+            return base.GetActionInf(new CAction[] { cActions[0] });
+        }
     }
-    public class RuledChessGame : ChessGame, IAIControl, IActionInf
+    public class RuledChessGame : ChessGame, IAIControl
     {
         public delegate IEnumerable<CAction[]> MoveRuleGetHandler(ChessBlock chessBlock, int pid, int t, RuledChessGame game);
         public delegate int ChessPowerBonus(ChessBlock chess, int pid, int t);
         public const int PlayerIdIv = 27;
-        public readonly Dictionary<int, string> IdStr;
         protected Dictionary<Player, int[]> PlayersChessId;
         public readonly MoveRuleGetHandler GetMove;
         public readonly ChessPowerBonus GetPowerBonus;
@@ -571,7 +598,7 @@ namespace TRGoChess
         public RuledChessGame(string name, int width, int height, Point[] initDirections, MoveRuleGetHandler moveRule, Image table,
             Dictionary<int, Image>[] type2Image, int[] types, int playerCount, Dictionary<int, string>[] typesStr,
             int[] typesPower, ChessPowerBonus powerBonus, int generalT = 0)
-            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount), DEFDrawIv, false)
+            : base(name, width, height, initDirections, table, DEFBlockSizeR, ToId2Img(type2Image), GetinitIds(types, playerCount), DEFDrawIv,GetIdStr(typesStr), false)
         {
             Types = types;
             GetMove = moveRule;
@@ -580,14 +607,19 @@ namespace TRGoChess
             typwer = typesPower;
             IdsDEFPower = new Dictionary<int, int>();
             if (generalT != 0) GeneralT = new int[] { GetChessId(1, generalT), GetChessId(2, generalT) };
-            IdStr = new Dictionary<int, string>();
+            
+        }
+        public static Dictionary<int,string> GetIdStr(Dictionary<int, string>[] typesStr)
+        {
+            Dictionary<int, string> re = new Dictionary<int, string>();
             for (int p = 0; p < 2; p++)
             {
                 foreach (int t in typesStr[p].Keys)
                 {
-                    IdStr[GetChessId(p + 1, t)] = typesStr[p][t];
+                    re[GetChessId(p + 1, t)] = typesStr[p][t];
                 }
             }
+            return re;
         }
         public override IEnumerable<CAction[]> GetLegalActions(Player player)
         {
@@ -629,10 +661,8 @@ namespace TRGoChess
             }
             return re;
         }
-        public static int EnvCount = 0;
         public int Envaluate(ChessTable chessTable, Player player)
         {
-            EnvCount++;
             int re = 0, pid = PlayerId[player];
             foreach (int i in chessTable.id2chess.Keys)
             {
@@ -686,25 +716,9 @@ namespace TRGoChess
         {
             return GridDrawer.id2Img[GetChessId(PlayerId[player], Types[0])];
         }
-        public virtual string GetActionInf(CAction[] cActions)
-        {
-            if (cActions.Length == 1)
-                if (cActions[0].from == ChessBlock.DEFID)
-                    return ChessLocToStr(cActions[0].Loc) + " 下 " + IdStr[cActions[0].to];
-                else
-                    return ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from] + " 换为 " + IdStr[cActions[0].to];
-            if (cActions.Length == 2)
-            {
-                if (cActions[0].from == ChessBlock.DEFID && cActions[1].to == ChessBlock.DEFID)
-                    return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 移动到 " + ChessLocToStr(cActions[0].Loc);
-                if (cActions[0].to == cActions[1].from && cActions[1].to == ChessBlock.DEFID)
-                    return ChessLocToStr(cActions[1].Loc) + IdStr[cActions[1].from] + " 吃 " + ChessLocToStr(cActions[0].Loc) + IdStr[cActions[0].from];
-            }
-            throw new Exception("No Inf!");
+        
 
-        }
-
-        public IEnumerable<CAction[]> GetMoves(Point chessPoint, Player player)
+        public override IEnumerable<CAction[]> GetMoves(Point chessPoint, Player player)
         {
             ChessBlock chessBlock = ChessTable[chessPoint];
             int p = GetPlayerId(chessBlock.Id);
@@ -1130,7 +1144,7 @@ namespace TRGoChess
         }
         public override void StartGame()
         {
-            InitTable(InitTT);
+            InitTable(InitT);
             base.StartGame();
         }
         public override string GetActionInf(CAction[] cActions)

@@ -27,7 +27,7 @@
     <ProductName>TRGOChess</ProductName>
     <PublisherName>TR</PublisherName>
     <SuiteName>TRGo</SuiteName>
-    <ApplicationRevision>7</ApplicationRevision>
+    <ApplicationRevision>10</ApplicationRevision>
     <ApplicationVersion>1.2.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>

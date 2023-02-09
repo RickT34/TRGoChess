@@ -13,15 +13,39 @@ using static TRGoChess.ChessTable;
 
 namespace TRGoChess
 {
+    /// <summary>
+    /// 棋盘类
+    /// </summary>
     public class ChessTable : IGrid
     {
+        /// <summary>
+        /// 棋盘格类
+        /// </summary>
         public class ChessBlock : IComparable
         {
+            /// <summary>
+            /// 棋盘格不存在时的ID
+            /// </summary>
             public const int NONEID = -1;
+            /// <summary>
+            /// 棋盘格上无棋子时的ID
+            /// </summary>
             public const int DEFID = 0;
+            /// <summary>
+            /// 棋盘格的ID，用于记录棋子
+            /// </summary>
             public int Id;
+            /// <summary>
+            /// 各个方向上的棋盘格，用于快速查找
+            /// </summary>
             public ChessBlock[] Surround;
+            /// <summary>
+            /// 链表信息
+            /// </summary>
             public ChessBlocksLink.LinkInf LinkInf;
+            /// <summary>
+            /// 位置
+            /// </summary>
             public readonly Point Loc;
             public ChessBlock(Point loc, int id = DEFID)
             {
@@ -40,18 +64,28 @@ namespace TRGoChess
                 return Loc.ToString() + ": " + Id.ToString();
             }
         }
+
+        /// <summary>
+        /// 定制为棋盘格的链表，提高增删效率
+        /// </summary>
         public class ChessBlocksLink : IEnumerable<ChessBlock>, IEnumerable
         {
+            /// <summary>
+            /// 链表尾，使用不存在于棋盘上的新建棋盘格
+            /// </summary>
             private readonly ChessBlock last;
-            private int count;
 
+            private int count;
+            /// <summary>
+            /// 数量
+            /// </summary>
             public int Count { get => count; }
 
+            #region 枚举器部分，用于兼容foreach
             public IEnumerator GetEnumerator()
             {
                 return new Enumerator(this);
             }
-
             IEnumerator<ChessBlock> IEnumerable<ChessBlock>.GetEnumerator()
             {
                 return new Enumerator(this);
@@ -86,6 +120,11 @@ namespace TRGoChess
                     current = null;
                 }
             }
+            #endregion
+
+            /// <summary>
+            /// 链表信息
+            /// </summary>
             public class LinkInf
             {
                 public ChessBlock LinkLeft, LinkRight;
@@ -95,6 +134,11 @@ namespace TRGoChess
                 last = new ChessBlock(new Point(-1, -1), ChessBlock.NONEID);
                 count = 0;
             }
+
+            /// <summary>
+            /// 在尾部添加元素
+            /// </summary>
+            /// <param name="block"></param>
             public void AddLast(ChessBlock block)
             {
                 if (count > 0)
@@ -104,6 +148,11 @@ namespace TRGoChess
                 last.LinkInf.LinkLeft = block;
                 count++;
             }
+
+            /// <summary>
+            /// 直接删除元素，不检查是否存在于本链表
+            /// </summary>
+            /// <param name="a">要删除的元素</param>
             public void Remove(ChessBlock a)
             {
                 if (a.LinkInf.LinkLeft != null)
@@ -113,6 +162,12 @@ namespace TRGoChess
                 a.LinkInf.LinkRight = null;
                 count--;
             }
+
+            /// <summary>
+            /// 在两个链表间交换元素
+            /// </summary>
+            /// <param name="a">要交换的元素a</param>
+            /// <param name="b">要交换的元素b</param>
             public static void Swap(ChessBlock a, ChessBlock b)
             {
                 LinkInf t = a.LinkInf;
@@ -120,16 +175,42 @@ namespace TRGoChess
                 b.LinkInf = t;
             }
         }
+
+        /// <summary>
+        /// 所有的棋盘格
+        /// </summary>
         public readonly ChessBlock[,] ChessT;
+
+        /// <summary>
+        /// 用id定位棋盘格链表
+        /// </summary>
         public readonly Dictionary<int, ChessBlocksLink> id2chess;
+        /// <summary>
+        /// 最后一步操作
+        /// </summary>
         public CAction[] actionLast;
+        /// <summary>
+        /// 所有已初始化的方向
+        /// </summary>
         public readonly Point[] directions;
+        /// <summary>
+        /// 是否开启边界查找优化
+        /// </summary>
         public bool OptifinedAround;
-        private HashSet<ChessBlock> arroundLastRet;
-        private LinkedList<CAction> arroundTemp;
+        /// <summary>
+        /// 墙壁方块
+        /// </summary>
         public readonly ChessBlock NoneBlock;
         public int Width => ChessT.GetLength(0);
         public int Height => ChessT.GetLength(1);
+        /// <summary>
+        /// 初始化棋盘
+        /// </summary>
+        /// <param name="width">宽度</param>
+        /// <param name="height">高度</param>
+        /// <param name="initDirections">要初始化的方向，用于快速查找</param>
+        /// <param name="initIds">所有要使用的ID</param>
+        /// <param name="optifinedAround">是否开启边界查找优化</param>
         public ChessTable(int width, int height, Point[] initDirections, int[] initIds, bool optifinedAround = false)
         {
             ChessT = new ChessBlock[width, height];
@@ -160,6 +241,10 @@ namespace TRGoChess
             arroundTemp = new LinkedList<CAction>();
             OptifinedAround = optifinedAround;
         }
+        /// <summary>
+        /// 复制棋盘
+        /// </summary>
+        /// <returns></returns>
         public ChessTable Clone()
         {
             ChessTable re = new ChessTable(Width, Height, directions, id2chess.Keys.ToArray(), OptifinedAround);
@@ -178,7 +263,14 @@ namespace TRGoChess
                 re.actionLast = actionLast;
             return re;
         }
+        /// <summary>
+        /// 检查是否位于棋盘内
+        /// </summary>
+        /// <param name="point">位置</param>
+        /// <returns></returns>
         public bool IsInTable(Point point) => point.X >= 0 && point.Y >= 0 && point.X < Width && point.Y < Height;
+
+        #region 重载的索引器
         public ChessBlock this[Point point]
         {
             get
@@ -187,6 +279,13 @@ namespace TRGoChess
             }
         }
         public int this[int x, int y] { get => ChessT[x, y].Id; }
+        #endregion
+
+        #region 棋盘操作函数
+        /// <summary>
+        /// 应用操作
+        /// </summary>
+        /// <param name="c"></param>
         private void Apply(CAction c)
         {
             ChessBlock chess = ChessT[c.Loc.X, c.Loc.Y];
@@ -205,12 +304,20 @@ namespace TRGoChess
                     arroundTemp.AddLast(c);
             }
         }
+        /// <summary>
+        /// 应用操作
+        /// </summary>
+        /// <param name="c"></param>
         public void Apply(CAction[] cAction)
         {
             actionLast = cAction;
             foreach (CAction c in cAction)
                 Apply(c);
         }
+        /// <summary>
+        /// 撤回操作
+        /// </summary>
+        /// <param name="c"></param>
         public void Withdraw(CAction[] cAction)
         {
             actionLast = new CAction[cAction.Length];
@@ -220,6 +327,16 @@ namespace TRGoChess
                 Apply(actionLast[i]);
             }
         }
+        #endregion
+
+        #region 模式检查函数
+        /// <summary>
+        /// 是否符合模式
+        /// </summary>
+        /// <param name="chess">棋盘格</param>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标</param>
+        /// <returns>true，如果符合模式</returns>
         public bool MatchPatten(ChessBlock chess, int[] patten, int direIndex)
         {
             int iv = 0;
@@ -231,6 +348,13 @@ namespace TRGoChess
             }
             return true;
         }
+        /// <summary>
+        /// 是否符合模式
+        /// </summary>
+        /// <param name="chess">棋盘格</param>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标集合</param>
+        /// <returns>true，如果符合模式</returns>
         public bool MatchPatten(ChessBlock chess, int[] patten, IEnumerable<int> direIndex)
         {
             foreach (int i in direIndex)
@@ -239,6 +363,12 @@ namespace TRGoChess
             }
             return false;
         }
+        /// <summary>
+        /// 是否符合模式，考虑所有已初始化的方向
+        /// </summary>
+        /// <param name="chess">棋盘格</param>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <returns>true，如果符合模式</returns>
         public bool MatchPatten(ChessBlock chess, int[] patten)
         {
             for (int i = 0; i < directions.Length; i++)
@@ -247,12 +377,24 @@ namespace TRGoChess
             }
             return false;
         }
+        /// <summary>
+        /// 定位一个模式出现的位置
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标</param>
+        /// <returns></returns>
         public ChessBlock FindPatten(int[] patten, int direIndex)
         {
             foreach (ChessBlock c in id2chess[patten[0]])
                 if (MatchPatten(c, patten, direIndex)) return c;
             return null;
         }
+        /// <summary>
+        /// 定位一个模式出现的位置
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标集合</param>
+        /// <returns></returns>
         public ChessBlock FindPatten(int[] patten, IEnumerable<int> direIndex, out int findDire)
         {
             ChessBlock re;
@@ -268,6 +410,12 @@ namespace TRGoChess
             findDire = 0;
             return null;
         }
+        /// <summary>
+        /// 定位一个模式出现的位置和方向
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="findDire">匹配到的模式的方向</param>
+        /// <returns></returns>
         public ChessBlock FindPatten(int[] patten, out int findDire)
         {
             ChessBlock re;
@@ -283,6 +431,12 @@ namespace TRGoChess
             findDire = 0;
             return null;
         }
+        /// <summary>
+        /// 统计一个模式出现的次数
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标</param>
+        /// <returns></returns>
         public int CountPatten(int[] patten, int direIndex)
         {
             int count = 0;
@@ -290,6 +444,12 @@ namespace TRGoChess
                 if (MatchPatten(c, patten, direIndex)) count += 1;
             return count;
         }
+        /// <summary>
+        /// 统计一个模式出现的次数
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <param name="direIndex">已初始化方向的下标集合</param>
+        /// <returns></returns>
         public int CountPatten(int[] patten, IEnumerable<int> direIndex)
         {
             int count = 0;
@@ -299,6 +459,11 @@ namespace TRGoChess
             }
             return count;
         }
+        /// <summary>
+        /// 统计一个模式出现的次数，考虑所有方向
+        /// </summary>
+        /// <param name="patten">模式，内容为棋盘格ID序列</param>
+        /// <returns></returns>
         public int CountPatten(int[] patten)
         {
             int count = 0;
@@ -316,6 +481,17 @@ namespace TRGoChess
             }
             return count;
         }
+        #endregion
+
+        #region 棋盘格查找函数
+        /// <summary>
+        /// 查找一个方向上所有相同id的棋盘格
+        /// </summary>
+        /// <param name="chess">起始位置，不检查</param>
+        /// <param name="direIndex">已初始化方向的下标</param>
+        /// <param name="id">id</param>
+        /// <param name="includeEndId">允许的末尾id</param>
+        /// <returns></returns>
         public static LinkedList<ChessBlock> GetLineSame(ChessBlock chess, int direIndex, int id, int includeEndId)
         {
             chess = chess.Surround[direIndex];
@@ -328,6 +504,14 @@ namespace TRGoChess
             if (chess.Id == includeEndId) re.AddLast(chess);
             return re;
         }
+        /// <summary>
+        /// 查找一个方向上所有相同id的棋盘格
+        /// </summary>
+        /// <param name="chess">起始位置，不检查</param>
+        /// <param name="direIndex">已初始化方向的下标集合</param>
+        /// <param name="id">id</param>
+        /// <param name="includeEndId">允许的末尾id</param>
+        /// <returns></returns>
         public static IEnumerable<ChessBlock> GetLineSame(ChessBlock chess, IEnumerable<int> direIndex, int id, int includeEndId)
         {
             IEnumerable<ChessBlock> re = new ChessBlock[0];
@@ -337,15 +521,29 @@ namespace TRGoChess
             }
             return re;
         }
-        public IEnumerable<ChessBlock> GetLineSame(ChessBlock chess, int id, int includeEnd)
+        /// <summary>
+        /// 查找一个方向上所有相同id的棋盘格，考虑所有已初始化的方向
+        /// </summary>
+        /// <param name="chess">起始位置，不检查</param>
+        /// <param name="id">id</param>
+        /// <param name="includeEndId">允许的末尾id</param>
+        /// <returns></returns>
+        public IEnumerable<ChessBlock> GetLineSame(ChessBlock chess, int id, int includeEndId)
         {
             IEnumerable<ChessBlock> re = new ChessBlock[0];
             for (int i = 0; i < directions.Length; i++)
             {
-                re = re.Concat(GetLineSame(chess, i, id, includeEnd));
+                re = re.Concat(GetLineSame(chess, i, id, includeEndId));
             }
             return re;
         }
+        /// <summary>
+        /// 查找一个方向的固定长度的棋盘格
+        /// </summary>
+        /// <param name="chess">起始位置，不检查</param>
+        /// <param name="direIndex">已初始化方向的下标</param>
+        /// <param name="step">长度</param>
+        /// <returns></returns>
         public LinkedList<ChessBlock> GetLine(ChessBlock chess, int direIndex, int step)
         {
             chess = chess.Surround[direIndex];
@@ -354,6 +552,13 @@ namespace TRGoChess
                 re.AddLast(chess);
             return re;
         }
+        /// <summary>
+        /// 查找所有已初始化方向的，固定长度的棋盘格
+        /// </summary>
+        /// <param name="chess">起始位置，不检查</param>
+        /// <param name="range">长度</param>
+        /// <param name="isFree">是否必须无棋子</param>
+        /// <returns></returns>
         public HashSet<ChessBlock> GetAround(ChessBlock chess, int range, bool isFree)
         {
             HashSet<ChessBlock> re = new HashSet<ChessBlock>();
@@ -365,6 +570,13 @@ namespace TRGoChess
                 }
             return re;
         }
+        /// <summary>
+        /// 查找所有同id棋子在所有已初始化方向的，固定长度的棋盘格
+        /// </summary>
+        /// <param name="id">id</param>
+        /// <param name="range">长度</param>
+        /// <param name="isFree">是否必须无棋子</param>
+        /// <returns></returns>
         public HashSet<ChessBlock> GetAround(int id, int range, bool isFree)
         {
             HashSet<ChessBlock> re = new HashSet<ChessBlock>();
@@ -377,6 +589,12 @@ namespace TRGoChess
                     }
             return re;
         }
+        /// <summary>
+        /// 查找所有棋子在所有已初始化方向的，固定长度的棋盘格
+        /// </summary>
+        /// <param name="range">长度</param>
+        /// <param name="isFree">是否必须无棋子</param>
+        /// <returns></returns>
         public HashSet<ChessBlock> GetAround(int range, bool isFree)
         {
             HashSet<ChessBlock> re = new HashSet<ChessBlock>();
@@ -394,6 +612,23 @@ namespace TRGoChess
 
             return re;
         }
+        /// <summary>
+        /// 查找棋子在所有已初始化方向上的，第一个的，无棋子的棋盘格
+        /// </summary>
+        /// <param name="chess">棋子</param>
+        /// <returns></returns>
+        public HashSet<ChessBlock> GetAroundNearFree(ChessBlock chess)
+        {
+            HashSet<ChessBlock> re = new HashSet<ChessBlock>();
+            foreach (ChessBlock c in chess.Surround)
+                if (c.Id == ChessBlock.DEFID)
+                    re.Add(c);
+            return re;
+        }
+        /// <summary>
+        /// 查找所有棋子在所有已初始化方向上的，第一个的，无棋子的棋盘格
+        /// </summary>
+        /// <returns></returns>
         public HashSet<ChessBlock> GetAroundNearFree()
         {
             HashSet<ChessBlock> re = new HashSet<ChessBlock>();
@@ -409,14 +644,13 @@ namespace TRGoChess
             }
             return re;
         }
-        public HashSet<ChessBlock> GetAroundNearFree(ChessBlock chess)
-        {
-            HashSet<ChessBlock> re = new HashSet<ChessBlock>();
-            foreach (ChessBlock c in chess.Surround)
-                if (c.Id == ChessBlock.DEFID)
-                    re.Add(c);
-            return re;
-        }
+
+        private HashSet<ChessBlock> arroundLastRet;
+        private LinkedList<CAction> arroundTemp;
+        /// <summary>
+        /// 查找所有棋子在所有已初始化方向上的，第一个的，无棋子的棋盘格。优化版本，大幅提高效率，需要开启优化。
+        /// </summary>
+        /// <returns></returns>
         public HashSet<ChessBlock> GetAroundNearFreeStep()
         {
             if (arroundLastRet == null)
@@ -462,6 +696,8 @@ namespace TRGoChess
             arroundTemp.Clear();
             return arroundLastRet;
         }
+        #endregion
+
         public override string ToString()
         {
             string s = "";
@@ -474,10 +710,23 @@ namespace TRGoChess
             return s;
         }
     }
+    /// <summary>
+    /// 棋盘操作类，用于表示一个棋盘格的Id变化
+    /// </summary>
     public class CAction
     {
+        /// <summary>
+        /// 棋盘格位置
+        /// </summary>
         public readonly Point Loc;
-        public readonly int from, to;
+        /// <summary>
+        /// 原始的Id
+        /// </summary>
+        public readonly int from;
+        /// <summary>
+        /// 操作后的Id
+        /// </summary>
+        public readonly int to;
         public CAction(ChessBlock chess, int to)
         {
             Loc = chess.Loc;
@@ -502,6 +751,12 @@ namespace TRGoChess
         {
             return Loc.X + Loc.Y << 4 + to << 12 + from << 8;
         }
+        /// <summary>
+        /// 添加棋子，需要一个操作
+        /// </summary>
+        /// <param name="chess">要添加棋子的棋盘格</param>
+        /// <param name="id">Id</param>
+        /// <returns></returns>
         public static CAction[] Add(ChessBlock chess, int id) => new CAction[] { new CAction(chess, id) };
         public static List<CAction[]> Add(List<ChessBlock> chess, int id)
         {
@@ -510,6 +765,12 @@ namespace TRGoChess
                 ret.Add(Add(chessBlock, id));
             return ret;
         }
+        /// <summary>
+        /// 移动棋子，需要两个操作
+        /// </summary>
+        /// <param name="from">从</param>
+        /// <param name="to">到</param>
+        /// <returns></returns>
         public static CAction[] Move(ChessBlock from, ChessBlock to) => new CAction[] { new CAction(to, from.Id), new CAction(from, ChessBlock.DEFID) };
         public static List<CAction[]> Move(ChessBlock from, List<ChessBlock> to)
         {
@@ -518,6 +779,13 @@ namespace TRGoChess
                 ret.Add(Move(from, chessBlock));
             return ret;
         }
+
+        /// <summary>
+        /// 从集合中查找某一操作
+        /// </summary>
+        /// <param name="cActions">集合</param>
+        /// <param name="cAction">操作</param>
+        /// <returns>如果找到，则返回操作，否则返回null</returns>
         public static CAction[] Find(IEnumerable<CAction[]> cActions, CAction[] cAction)
         {
             int i = 0;
@@ -538,6 +806,7 @@ namespace TRGoChess
             }
             return null;
         }
+
         public static int GetHash(CAction[] cActions)
         {
             int hash = cActions.Length;
@@ -545,7 +814,16 @@ namespace TRGoChess
                 hash ^= cAction.GetHashCode();
             return hash;
         }
+        /// <summary>
+        /// 反向操作
+        /// </summary>
+        /// <returns></returns>
         public CAction Reverse() => new CAction(Loc, to, from);
+        /// <summary>
+        /// 复制操作
+        /// </summary>
+        /// <param name="c"></param>
+        /// <returns></returns>
         public static CAction[] Clone(CAction[] c)
         {
             CAction[] re = new CAction[c.Length];
@@ -556,6 +834,9 @@ namespace TRGoChess
             return re;
         }
     }
+    /// <summary>
+    /// 用于坐标的常用函数类
+    /// </summary>
     public class PMath
     {
         public static readonly Point[] towords = new Point[] { new Point(0, 1), new Point(-1, 1), new Point(-1, 0), new Point(-1, -1), new Point(1, 1), new Point(1, 0), new Point(1, -1), new Point(0, -1) };
@@ -614,6 +895,9 @@ namespace TRGoChess
         public static Point Add(Point a, Point b) => new Point(a.X + b.X, a.Y + b.Y);
         public static Point Mius(Point a, Point b) => new Point(a.X - b.X, a.Y - b.Y);
     }
+    /// <summary>
+    /// 棋子图标绘制类
+    /// </summary>
     public class IconMaker
     {
         public Bitmap bitmap;
@@ -712,6 +996,9 @@ namespace TRGoChess
             }
         }
     }
+    /// <summary>
+    /// 棋盘底板绘制类
+    /// </summary>
     public class TableMaker
     {
         public const int xiv = 0, yiv = 0;
@@ -857,12 +1144,30 @@ namespace TRGoChess
             return re;
         }
     }
+    /// <summary>
+    /// 表格接口，表示支持当做表格读取数据
+    /// </summary>
     public interface IGrid
     {
+        /// <summary>
+        /// 读取数据
+        /// </summary>
+        /// <param name="x">x</param>
+        /// <param name="y">y</param>
+        /// <returns></returns>
         int this[int x, int y] { get; }
+        /// <summary>
+        /// 宽度
+        /// </summary>
         int Width { get; }
+        /// <summary>
+        /// 高度
+        /// </summary>
         int Height { get; }
     }
+    /// <summary>
+    /// 棋盘绘制类
+    /// </summary>
     public class GridDrawer
     {
         private readonly IGrid Grid;
@@ -888,12 +1193,12 @@ namespace TRGoChess
             BackgroundRev.RotateFlip(RotateFlipType.RotateNoneFlipY);
             DrawIv = drawIv;
         }
-        private Rectangle GetBlockRect(int X, int Y)
+        public Rectangle GetBlockRect(int X, int Y)
         {
             if(reVersed) return new Rectangle(X * IconSize.Width + DrawIv.X, (Grid.Height - Y - 1) * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
             return new Rectangle(X * IconSize.Width + DrawIv.X, Y * IconSize.Height + DrawIv.Y, IconSize.Width, IconSize.Height);
         }
-        private Rectangle GetBlockRectSub(int X, int Y)
+        public Rectangle GetBlockRectSub(int X, int Y)
         {
             if (reVersed) return new Rectangle(X * IconSize.Width + 2 + DrawIv.X, (Grid.Height-Y-1) * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
             return new Rectangle(X * IconSize.Width + 2 + DrawIv.X, Y * IconSize.Height + 2 + DrawIv.Y, IconSize.Width - 4, IconSize.Height - 4);
@@ -912,6 +1217,22 @@ namespace TRGoChess
             if (data != null) DrawData(data, Brushes.Red);
             return bitmap;
         }
+        public Image DrawLines(IEnumerable<Point> points, Pen pen)
+        {
+            int c = points.Count();
+            if (c > 1)
+            {
+                Point[] l = new Point[c];
+                int i = 0;
+                foreach (Point p in points)
+                {
+                    Rectangle r = GetBlockRect(p.X, p.Y);
+                    l[i++] = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+                }
+                g.DrawLines(pen, l);
+            }
+            return bitmap;
+        }
         public Point GetClick(Point point)
         {
             if(reVersed) return new Point((point.X - DrawIv.X) / IconSize.Width,Grid.Height - (point.Y - DrawIv.Y) / IconSize.Height - 1);
@@ -925,22 +1246,28 @@ namespace TRGoChess
             }
         }
     }
+    /// <summary>
+    /// 高效模式计数类，使用有限状态机
+    /// </summary>
     public class PowerCounter
     {
+        /// <summary>
+        /// 有限状态机节点
+        /// </summary>
         public class AutoMach
         {
             public readonly Dictionary<int, AutoMach> Nudes;
-            public int Final;
+            public int Value;
             public AutoMach(int final)
             {
                 Nudes = new Dictionary<int, AutoMach>();
-                Final = final;
+                Value = final;
             }
             public AutoMach() : this(-2) { }
             public static AutoMach Err = new AutoMach(-1);
             public void InitKeys(IEnumerable<int> keys)
             {
-                if (Final != -2) return;
+                if (Value != -2) return;
                 foreach (int k in keys)
                 {
                     if (Nudes.ContainsKey(k)) Nudes[k].InitKeys(keys);
@@ -949,7 +1276,7 @@ namespace TRGoChess
             }
             public override string ToString()
             {
-                return Final.ToString();
+                return Value.ToString();
             }
         }
         private readonly AutoMach start;
@@ -975,7 +1302,7 @@ namespace TRGoChess
                     if (!t.Nudes.ContainsKey(Patterns[x][y]))
                         t.Nudes[Patterns[x][y]] = new AutoMach();
                     t = t.Nudes[Patterns[x][y]];
-                    if (t.Final != -2) break;
+                    if (t.Value != -2) break;
                     y++;
                 }
             }
@@ -990,12 +1317,12 @@ namespace TRGoChess
         }
         public static int Match(ChessBlock chess, int diri, AutoMach t)
         {
-            while (t.Final == -2)
+            while (t.Value == -2)
             {
                 chess = chess.Surround[diri];
                 t = t.Nudes[chess.Id];
             }
-            return t.Final;
+            return t.Value;
         }
         public int[] CountPatterns(ChessTable chessTable)
         {
