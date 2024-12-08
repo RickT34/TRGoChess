@@ -50,7 +50,8 @@
             "五子棋",
             "黑白棋",
             "国际象棋",
-            "中国象棋"});
+            "中国象棋",
+            "三乘三字棋"});
             this.comboBox1.Location = new System.Drawing.Point(173, 12);
             this.comboBox1.Name = "comboBox1";
             this.comboBox1.Size = new System.Drawing.Size(161, 26);

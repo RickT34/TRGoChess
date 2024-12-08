@@ -1624,4 +1624,169 @@ namespace TRGoChess
             return TableMaker.GetTable(DEFBlockSizeR, blockInfs, DEFDrawIv.X);
         }
     }
+    public class THEChess : ChessGame, IAIControl
+    {
+        public static readonly Dictionary<int, Image> id2img = new Dictionary<int, Image> { [1] = IconMaker.DEFChess(DEFChessSize, Color.Green).bitmap, [2] = IconMaker.DEFChess(DEFChessSize, Color.Red).bitmap };
+        public static readonly Dictionary<int, string> id2str = new Dictionary<int, string>() { [1] = "绿子", [2] = "红子" };
+        public static readonly Point[] Centres = new Point[] { new Point(1, 1), new Point(4, 1), new Point(7, 1),
+            new Point(1, 4), new Point(4, 4), new Point(7, 4),
+            new Point(1, 7), new Point(4, 7), new Point(7, 7)
+    };
+    public static readonly int[][] LLines = new int[][]
+            {
+                new int[]{0,4,8},
+                new int[]{2,4,6},
+                new int[]{3,4,5},
+                new int[]{1,4,7},
+                new int[]{0,1,2},
+                
+                new int[]{6,7,8},
+
+                new int[]{0,3,6},
+                
+                new int[]{2,5,8},
+            };
+        public static readonly Point[] dirs = new Point[] { new Point(-1, -1), new Point(0, -1), new Point(1, -1), new Point(-1, 0),new Point(0,0), new Point(1, 0), new Point(-1, 1), new Point(0, 1), new Point(1, 1) };
+        public THEChess():base("THEChess",9,9,dirs,TableMaker.GetStandredTable(9,9,DEFBlockSize,new TableMaker.BlockInf(TableMaker.BlockMark.Box,Brushes.WhiteSmoke))
+            ,DEFBlockSize,id2img,new int[] {1,2},DEFDrawIv,id2str)
+        {
+        }
+        private static int GetDir(Point point)
+        {
+            int x=point.X%3,y=point.Y%3;
+            return x + y * 3;
+        }
+
+
+        private static int[] GetDominated(ChessTable chessTable)
+        {
+            int[] Dominated = new int[9];
+            for (int i = 0; i < 9; i++)
+            {
+                ChessBlock cb = chessTable[Centres[i]];
+                    if (cb.Id!=0&&CheckId(cb.Id,cb,-1))
+                    {
+                        Dominated[i] = cb.Id;
+                    continue;
+                    }
+                
+            }
+            return Dominated;
+        }
+
+        private static int IsWin(int[] Dominated)
+        {
+            if (Dominated[4] != 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    if ( Dominated[LLines[i][0]] == Dominated[LLines[i][2]] && Dominated[LLines[i][2]] == Dominated[4])
+                        return Dominated[4];
+            }
+            return 0;
+        }
+
+        public int Envaluate(ChessTable chessTable, Player player)
+        {
+            int re = 0;
+            foreach(ChessBlock cb in chessTable.id2chess[1])
+            {
+                re += GetDir(cb.Loc) == 4 ? 5 : 1;
+            }
+            foreach (ChessBlock cb in chessTable.id2chess[2])
+            {
+                re -= GetDir(cb.Loc) == 4 ? 5 : 1;
+            }
+            int[] d = GetDominated(chessTable);
+            for(int i = 0; i < 9; i++)
+            {
+                if (i == 4)
+                {
+                    if (d[4] == 1) re += 20;
+                    else if (d[4] == -1) re -= 20;
+                }
+                else
+                {
+                    if (d[i] == 1) re += 4;
+                    else if (d[i] == -1) re -= 4;
+                }
+            }
+            if (PlayerId[player] == 1) return re;
+            return -re;
+        }
+
+        public IEnumerable<CAction[]> GetLimitedActions(ChessTable chessTable, Player player)
+        {
+            LinkedList<CAction[]> re = new LinkedList<CAction[]>();
+            int[] Dominated = GetDominated(chessTable);
+            if (IsWin(Dominated) != 0)
+                return re;
+            if (chessTable.actionLast != null)
+            {
+                int d = GetDir(chessTable.actionLast[0].Loc);
+                if (Dominated[d]==0)
+                {
+                    foreach(ChessBlock cb in chessTable[Centres[d]].Surround)
+                    {
+                        if (cb.Id == ChessBlock.DEFID)
+                            re.AddLast(CAction.Add(cb, PlayerId[player]));
+                    }
+                    if(re.Count!= 0)
+                        return re;
+                }
+            }
+            foreach (ChessBlock cb in chessTable.id2chess[ChessBlock.DEFID])
+                re.AddLast(CAction.Add(cb, PlayerId[player]));
+            return re;
+        }
+        protected override void AfterApplied(CAction[] action)
+        {
+            int w = IsWin(GetDominated(ChessTable));
+            if (w != 0) FinishGame(NowPlayer);
+            base.AfterApplied(action);
+        }
+        public override IEnumerable<CAction[]> GetLegalActions(Player player)
+        {
+            return GetLimitedActions(ChessTable, player);
+        }
+        public static bool CheckId(int id,ChessBlock chessBlock, int x)
+        {
+            for(int idx = 0; idx < LLines.Length; idx++)
+            {
+                bool f = true;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (chessBlock.Surround[LLines[idx][i]].Id != id && LLines[idx][i] != x)
+                    {
+                        f= false;
+                        break;
+                    }
+                }
+                if(f)
+                    return true;
+            }
+            return false;
+        }
+        public override CAction[] BeforeApply(ChessTable chessTable, CAction[] action)
+        {
+            int k = GetDir(action[0].Loc);
+            ChessBlock centre = chessTable[action[0].Loc].Surround[8 - k];
+            if (CheckId(action[0].to,centre,k))
+                    {
+                        CAction[] re = new CAction[9];
+                        re[0] = action[0];
+                        int l = 1;
+                        for(int j = 0; j < 9; j++)
+                        {
+                            if (j != k)
+                                re[l++] = new CAction(centre.Surround[j], action[0].to);
+                        }
+                        return re;
+                    }
+            return action;
+        }
+        public override string GetActionInf(CAction[] cActions)
+        {
+            return base.GetActionInf(new CAction[] { cActions[0] });
+        }
+    }
 }

@@ -34,6 +34,9 @@ namespace TRGoChess
                 case 3:
                     chessGame = new ChineseChess();
                     break;
+                case 4:
+                    chessGame=new THEChess();
+                    break;
                 default:
                     return;
             }

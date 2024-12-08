@@ -189,6 +189,7 @@ namespace TRGoChess
         /// 最后一步操作
         /// </summary>
         public CAction[] actionLast;
+        public object Tag;
         /// <summary>
         /// 所有已初始化的方向
         /// </summary>
@@ -758,12 +759,9 @@ namespace TRGoChess
         /// <param name="id">Id</param>
         /// <returns></returns>
         public static CAction[] Add(ChessBlock chess, int id) => new CAction[] { new CAction(chess, id) };
-        public static List<CAction[]> Add(List<ChessBlock> chess, int id)
+        public static IEnumerable<CAction[]> Add(IEnumerable<ChessBlock> chess, int id)
         {
-            List<CAction[]> ret = new List<CAction[]>();
-            foreach (ChessBlock chessBlock in chess)
-                ret.Add(Add(chessBlock, id));
-            return ret;
+            return chess.Select((cb)=>Add(cb, id));
         }
         /// <summary>
         /// 移动棋子，需要两个操作
@@ -839,6 +837,7 @@ namespace TRGoChess
     /// </summary>
     public class PMath
     {
+        //                                                     0                1                 2                 3                  4                5                6                 7                 
         public static readonly Point[] towords = new Point[] { new Point(0, 1), new Point(-1, 1), new Point(-1, 0), new Point(-1, -1), new Point(1, 1), new Point(1, 0), new Point(1, -1), new Point(0, -1) };
         public static List<Point> GetStraight(Point point, Point toward, int step = 1)
         {
@@ -1100,13 +1099,14 @@ namespace TRGoChess
                 g.DrawLine(blockInf.pen, rectangle.X + rectangle.Width / 2 - 1, rectangle.Y + rectangle.Height / 2 - 1, rectangle.X , rectangle.Y + rectangle.Height - 1);
             }
         }
-        public static Image GetStandredTable(int width, int height, Size iconSize, bool Loc = true)
+        public static Image GetStandredTable(int width, int height, Size iconSize,BlockInf blockInf=null, bool Loc = true)
         {
             BlockInf[,] def = new BlockInf[width, height];
+            if (blockInf == null) blockInf = BlockInf.Defaut;
             for (int x = 0; x < width; x++)
                 for (int y = 0; y < height; y++)
                 {
-                    def[x, y] = BlockInf.Defaut;
+                    def[x, y] = blockInf;
                 }
             return GetTable( iconSize, def, Loc ? ChessGame.DEFDrawIv.X : 0);
         }

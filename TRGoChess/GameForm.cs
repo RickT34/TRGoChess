@@ -108,7 +108,7 @@ namespace TRGoChess
         public bool Reversed=false;
         private void UpdateTable()
         {
-            if (ChessGame.NowPlayer is HumanPlayer)
+            if (ChessGame.NowPlayer is HumanPlayer&&ChessGame is RuledChessGame)
             {
                 bool rev = ChessGame.players[ChessGame.players.Count - 1] == ChessGame.NowPlayer;
                 Reversed = rev;
@@ -187,6 +187,7 @@ namespace TRGoChess
     }
     public class HumanPlayer : Player
     {
+        public const int MARKCOUNT = 100;
         private Queue<Point> points = new Queue<Point>();
         private int maxp;
         private GameForm gameForm;
@@ -196,6 +197,7 @@ namespace TRGoChess
         private Dictionary<string, CAction[]> cas;
         private IEnumerable<CAction[]> caa;
         private Control pictureBox;
+        public static HumanPlayer NowPlayer;
         public HumanPlayer(PictureBox pictureBox, int maxp, GameForm gameForm, IActionInf actionInf) : base("Human")
         {
             this.pictureBox = pictureBox;
@@ -224,11 +226,12 @@ namespace TRGoChess
                 MarkMoves(points.Peek());
             else
                 MarkMoves(legalActions);
+            NowPlayer = this;
             base.PrePare(game, legalActions);
         }
         private void PictureBox_MouseClick(object sender, MouseEventArgs e)
         {
-            if (gameForm.ChessGame.NowPlayer != this) return;
+            if (NowPlayer != this) return;
             if (points.Count == maxp) points.Dequeue();
             points.Enqueue(gameForm.ChessGame.GetClick(e.Location));
             if (e.Button == MouseButtons.Left)
@@ -275,7 +278,6 @@ namespace TRGoChess
             gameForm.ClearImage(Name + " moves");
             gameForm.ClearImage(Name + " canMoves");
         }
-
         private void MarkMoves(Point chessLoc)
         {
             if (actionInf != null)
@@ -305,7 +307,7 @@ namespace TRGoChess
                     map[ca[1].Loc] = 3;
                 else map[ca[0].Loc] = 3;
             }
-            if (map.Count < 30)
+            if (map.Count < MARKCOUNT)
                 gameForm.SetImage(gUI.GetGUI(map), Name + " canMoves");
             return;
         }
